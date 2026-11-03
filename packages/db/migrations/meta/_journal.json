@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793717912773,
+      "tag": "0000_tough_kingpin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793733382223,
+      "tag": "0001_overjoyed_captain_universe",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793735153186,
+      "tag": "0002_cooing_wildside",
+      "breakpoints": true
+    }
+  ]
+}

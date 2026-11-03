@@ -1,3 +1,3 @@
-# Database integration tests
+# PostgreSQL concurrency verification
 
-Add real-PostgreSQL tests for concurrent bookings, atomic rescheduling, and reminder restart behavior. Use an isolated test database. Extend the Vitest include configuration when adding tests here.
+Run npm run test:postgres with a local DATABASE_URL and CREATE DATABASE permission. The script creates a uniquely named test database, applies migrations, tests independent concurrent connections, and cleans up its own database afterwards. It refuses nonlocal servers and never clears application tables.

@@ -1,4 +1,118 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-:root { font-family: system-ui, sans-serif; background: #f5faf8; color: #172b27; }
-body { margin: 0; min-width: 320px; }
+/* Palette adapted from https://www.thoughtfull.world/. */
+@theme {
+  --color-brand: #00bfa2;
+  --color-ink: #03367e;
+  --color-copy: #354e62;
+  --color-muted: #526b78;
+  --color-link: #2d7f7a;
+  --color-soft: #aed5df;
+  --color-mint: #9bded6;
+}
+
+:root {
+  font-family: system-ui, sans-serif;
+  background: #f0f7f9;
+  color: var(--color-copy);
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: linear-gradient(145deg, #f0f7f9 0%, #f0f7f9 55%, #e7f6f2 100%);
+}
+
+::selection {
+  background: var(--color-mint);
+  color: var(--color-ink);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.auth-card {
+  border: 1px solid var(--color-soft);
+  background: white;
+  box-shadow: 0 12px 40px #03367e0a;
+}
+
+.field {
+  display: grid;
+  gap: 0.5rem;
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  border: 1px solid #668893;
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+  background: white;
+  color: var(--color-copy);
+  font: inherit;
+  font-weight: 400;
+}
+
+.field input::placeholder {
+  color: var(--color-muted);
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--color-ink);
+}
+
+.primary {
+  border-radius: 0.65rem;
+  padding: 0.8rem 1.25rem;
+  background: var(--color-brand);
+  color: var(--color-ink);
+  font-weight: 600;
+  transition: background-color 150ms ease;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-mint);
+}
+
+.primary:active:not(:disabled) {
+  background: #7bd2c7;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary {
+    transition: none;
+  }
+}
+
+input[type='checkbox'] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--color-ink);
+}
+
+fieldset:disabled {
+  opacity: 0.7;
+}
+
+.calendar-date:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}

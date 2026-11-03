@@ -1,3 +1,1 @@
-# Auth
-
-Place feature routes, request/response schemas, and services here. Business behavior is not implemented yet.
+Authentication routes validate input and resolve session cookies. Password hashing is in password.ts; persistence is in packages/db/src/auth.ts. Register future protected routes inside the authenticated plugin scope or move session lookup to a shared ancestor.

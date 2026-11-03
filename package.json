@@ -19,15 +19,23 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "npm run generate -w @thoughtfull/db",
-    "db:migrate": "npm run migrate -w @thoughtfull/db"
+    "db:migrate": "npm run migrate -w @thoughtfull/db",
+    "predev": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db",
+    "pretest": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db",
+    "pretypecheck": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db",
+    "pretest:e2e": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db",
+    "test:postgres": "tsx tests/integration/booking-concurrency.ts",
+    "pretest:postgres": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@playwright/test": "^1.56.0",
     "@types/node": "^24.0.0",
     "concurrently": "^9.2.0",
     "prettier": "^3.6.0",
     "tsx": "^4.20.0",
     "typescript": "~5.9.3",
-    "vitest": "^3.2.0"
-  }
+    "vitest": "^5.1.0"
+  },
+  "type": "module"
 }

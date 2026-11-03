@@ -16,8 +16,9 @@
     "migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.0",
-    "pg": "^8.16.0"
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.16.0",
+    "@thoughtfull/shared": "0.1.0"
   },
   "devDependencies": {
     "@types/pg": "^8.15.0",

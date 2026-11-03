@@ -1,3 +1,1 @@
-# Browser tests
-
-Add booking-flow Playwright specs here when the features exist. The configuration starts the web frontend; extend it to start the API and provision a test database before adding full-stack tests. Install browsers with `npx playwright install chromium`.
+Playwright tests signup, reload persistence, logout, incorrect credentials, and login for both roles using the real API with isolated PGlite. Run npm run test:e2e with Chromium installed or PLAYWRIGHT_CHANNEL=msedge.
