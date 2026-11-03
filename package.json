@@ -1,0 +1,33 @@
+{
+  "name": "thoughtfull-task",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web,worker \"npm run dev -w @thoughtfull/api\" \"npm run dev -w @thoughtfull/web\" \"npm run dev -w @thoughtfull/worker\"",
+    "build": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db && npm run build -w @thoughtfull/api && npm run build -w @thoughtfull/worker && npm run build -w @thoughtfull/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "npm run generate -w @thoughtfull/db",
+    "db:migrate": "npm run migrate -w @thoughtfull/db"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.0",
+    "prettier": "^3.6.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

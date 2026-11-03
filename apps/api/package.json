@@ -1,0 +1,17 @@
+{
+  "name": "@thoughtfull/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@thoughtfull/db": "0.1.0",
+    "@thoughtfull/shared": "0.1.0",
+    "fastify": "^5.0.0"
+  }
+}
