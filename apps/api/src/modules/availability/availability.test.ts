@@ -105,10 +105,11 @@ it('starts closed and persists a professional week across API restart', async ()
     headers: { cookie: user.cookie },
   });
   expect(slots.statusCode).toBe(200);
-  expect(slots.json().slots).toHaveLength(32);
+  // The 01:00 UTC start is only one hour after the fixed clock, inside the 2-hour notice.
+  expect(slots.json().slots).toHaveLength(31);
   expect(slots.json().slots[0]).toEqual({
-    startsAt: '2026-11-02T01:00:00Z',
-    endsAt: '2026-11-02T01:50:00Z',
+    startsAt: '2026-11-02T02:00:00Z',
+    endsAt: '2026-11-02T02:50:00Z',
   });
 });
 
@@ -424,10 +425,10 @@ it('removes a blocked date from the professional slot preview and restores it on
         headers: { cookie: user.cookie },
       })
     ).json().slots as { startsAt: string }[];
-  expect(await preview()).toHaveLength(32);
+  expect(await preview()).toHaveLength(31);
   await blockDate(user.cookie, { date: '2026-11-09' });
   const blocked = await preview();
-  expect(blocked).toHaveLength(24);
+  expect(blocked).toHaveLength(23);
   // Monday 2026-11-09 09:00 Singapore time is 01:00 UTC the same day.
   expect(blocked.some((slot) => slot.startsAt.startsWith('2026-11-09'))).toBe(
     false,
@@ -437,5 +438,5 @@ it('removes a blocked date from the professional slot preview and restores it on
     url: '/api/professional/blocked-dates/2026-11-09',
     headers: { ...headers, cookie: user.cookie },
   });
-  expect(await preview()).toHaveLength(32);
+  expect(await preview()).toHaveLength(31);
 });

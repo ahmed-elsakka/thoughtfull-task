@@ -210,6 +210,61 @@ it('covers all 28 viewer-local dates across opposite sides of the date line', ()
   ).toBe(true);
 });
 
+describe('minimum booking notice', () => {
+  const mondays = week(1, '09:00', '17:00');
+
+  it('keeps a start exactly at the notice and drops earlier ones', () => {
+    const result = generateAvailabilitySlots(
+      mondays,
+      'UTC',
+      '2026-11-02T08:00:00Z',
+      'UTC',
+      [],
+      120,
+    );
+    expect(result.slots[0]!.startsAt).toBe('2026-11-02T10:00:00Z');
+    const justLate = generateAvailabilitySlots(
+      mondays,
+      'UTC',
+      '2026-11-02T08:00:01Z',
+      'UTC',
+      [],
+      120,
+    );
+    expect(justLate.slots[0]!.startsAt).toBe('2026-11-02T11:00:00Z');
+  });
+
+  it('defaults to no notice, and can push a whole day out of reach', () => {
+    const now = '2026-11-02T08:30:00Z';
+    expect(
+      generateAvailabilitySlots(mondays, 'UTC', now).slots[0]!.startsAt,
+    ).toBe('2026-11-02T09:00:00Z');
+    const late = generateAvailabilitySlots(
+      mondays,
+      'UTC',
+      '2026-11-02T15:30:00Z',
+      'UTC',
+      [],
+      120,
+    );
+    expect(late.slots[0]!.startsAt).toBe('2026-11-09T09:00:00Z');
+  });
+
+  it('measures elapsed time across a daylight-saving change', () => {
+    // US clocks fall back on 2026-11-01. 01:30 EDT plus two elapsed hours is 02:30 EDT-equivalent.
+    const result = generateAvailabilitySlots(
+      week(7, '09:00', '17:00'),
+      'America/New_York',
+      '2026-11-01T11:30:00Z',
+      'America/New_York',
+      [],
+      120,
+    );
+    // 09:00 EST is 14:00Z, which is 2.5 hours after 11:30Z, so it stays bookable.
+    expect(result.slots[0]!.startsAt).toBe('2026-11-01T14:00:00Z');
+  });
+});
+
 describe('blocked dates', () => {
   const mondays = week(1, '09:00', '17:00');
   const now = '2026-11-02T00:00:00Z';

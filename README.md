@@ -72,6 +72,10 @@ Run npm run db:generate after schema edits and npm run db:migrate to apply migra
 
 Verification in the development environment: build, type checks, formatting, and all 77 unit/API/SQL tests passed. Browser specs were added, but Edge exited before executing them due to sandbox access errors; the fallback Chromium download stalled. Run the browser tests on a host that permits Playwright browser processes. Production dependency audit reported zero vulnerabilities; Drizzle Kit has moderate development-only advisories.
 
+## Minimum booking notice
+
+Members cannot book or reschedule onto a session that starts less than 2 hours from now. A start exactly 2 hours ahead is still allowed. The rule is the `MIN_BOOKING_NOTICE_MINUTES` constant in packages/shared/src/constants.ts. Slots inside the window are hidden from the member calendar, the reschedule picker and the professional's slot preview. The server also rejects a direct request with 400 and "Sessions must be booked at least 2 hours ahead." The time is measured in elapsed hours, so daylight-saving changes do not move it. The notice does not apply to cancelling, and a retried booking request that was already accepted is replayed rather than rejected. `npm test` covers the boundary, rescheduling, replays, and the calendar.
+
 ## Blocked dates
 
 Log in as a professional and use **Blocked dates** below the working hours. Pick a date (today up to 365 days ahead) and choose **Block date**. Members then see no slots on that date, and the slot preview updates immediately. **Unblock** restores the date. Dates are calendar dates in the professional's own timezone. Blocking does not cancel sessions that are already booked: they stay confirmed and are flagged in the list so you can cancel them from My sessions. Apply migration 0004 with `npm run db:migrate` first.

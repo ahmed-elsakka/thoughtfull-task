@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   generateAvailabilitySlots,
   MEMBER_CHANGE_NOTICE_MS,
+  MIN_BOOKING_NOTICE_MINUTES,
   type SessionChangeRequest,
   type RescheduleRequest,
   type Booking,
@@ -119,6 +120,17 @@ async function withoutConflicts(
 
 type OwnedBookingRow = BookingRow & { member_id: string };
 
+// Rejects a future start that is closer than the minimum booking notice.
+function checkBookingNotice(startsAt: number, now: Date) {
+  if (
+    startsAt > now.getTime() &&
+    startsAt < now.getTime() + MIN_BOOKING_NOTICE_MINUTES * 60_000
+  )
+    throw new BookingInputError(
+      `Sessions must be booked at least ${MIN_BOOKING_NOTICE_MINUTES / 60} hours ahead.`,
+    );
+}
+
 function checkMemberDeadline(
   booking: Pick<BookingRow, 'starts_at'>,
   now: Date,
@@ -234,6 +246,7 @@ export function createBookingStore(database: SqlDatabase): BookingStore {
         now.toISOString(),
         rows.find((u) => u.id === memberId)!.timezone,
         blocked,
+        MIN_BOOKING_NOTICE_MINUTES,
       );
       const free = await withoutConflicts(
         database,
@@ -267,16 +280,19 @@ export function createBookingStore(database: SqlDatabase): BookingStore {
             );
           checkMemberDeadline(booking, clock());
 
+          const reviewedAt = clock();
           const days = await readWorkingWeek(db, booking.professional_id);
           const blocked = await readBlockedDates(db, booking.professional_id);
           const preview = generateAvailabilitySlots(
             days,
             participants.find((u) => u.id === booking.professional_id)!
               .timezone,
-            clock().toISOString(),
+            reviewedAt.toISOString(),
             participants.find((u) => u.id === memberId)!.timezone,
             blocked,
+            MIN_BOOKING_NOTICE_MINUTES,
           );
+          checkBookingNotice(Date.parse(input.startsAt), reviewedAt);
           const slot = preview.slots.find(
             (value) =>
               Date.parse(value.startsAt) === Date.parse(input.startsAt),
@@ -292,6 +308,7 @@ export function createBookingStore(database: SqlDatabase): BookingStore {
             throw new BookingInputError(
               'Sessions in the past cannot be booked.',
             );
+          checkBookingNotice(Date.parse(slot.startsAt), acceptedAt);
           if (Date.parse(slot.startsAt) === booking.starts_at.getTime())
             return publicBooking(booking);
 
@@ -376,6 +393,7 @@ export function createBookingStore(database: SqlDatabase): BookingStore {
         now.toISOString(),
         member.timezone,
         blocked,
+        MIN_BOOKING_NOTICE_MINUTES,
       );
 
       return withoutConflicts(database, preview, professionalId, memberId);
@@ -435,7 +453,9 @@ export function createBookingStore(database: SqlDatabase): BookingStore {
             now.toISOString(),
             member.timezone,
             blocked,
+            MIN_BOOKING_NOTICE_MINUTES,
           );
+          checkBookingNotice(start.getTime(), now);
           const slot = preview.slots.find(
             (value) => Date.parse(value.startsAt) === start.getTime(),
           );
@@ -451,6 +471,7 @@ export function createBookingStore(database: SqlDatabase): BookingStore {
             throw new BookingInputError(
               'Sessions in the past cannot be booked.',
             );
+          checkBookingNotice(start.getTime(), acceptedAt);
 
           const id = randomUUID();
           const { rows } = await db.query<BookingRow>(

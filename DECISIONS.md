@@ -16,6 +16,12 @@
 - Persist reminders; insert notifications and mark reminders delivered atomically, with a unique reminder reference. Coordinate booking changes and delivery using consistent locks.
 - Server-side session authentication and ownership checks on every protected endpoint.
 
+## Minimum booking notice
+
+Optional extra from the brief. The notice is a fixed 2 hours, kept as one shared constant rather than a per-professional setting, because the brief gives that figure as the example and a setting would add a table, validation and UI for no stated need. A start exactly 2 hours ahead is bookable; anything sooner is not. The rule lives in slot generation, so the member calendar, reschedule picker and professional preview agree, and `book` and `reschedule` check it again against the server clock after taking the locks, so a stale page or a hand-written request cannot bypass it. A request that is rejected for notice gets a specific message instead of the generic "no longer offered".
+
+Two interactions are deliberate. A replayed booking request returns the original session even if its notice window has since passed, because the replay is checked before the notice. Cancelling is unaffected, since the 24-hour rule already governs it. Because every valid booking is at least 2 hours out, the 1-hour reminder is never skipped for a new booking, and only the 24-hour reminder can be missed. Known limitation: the notice is measured from the server clock when the request is processed, so a member who opens the confirmation screen at 1 hour 59 minutes before the start can be rejected at the last second.
+
 ## Blocked dates
 
 Optional extra from the brief. A blocked date is a calendar date (`date` column) in the professional's own timezone, not an instant, because a holiday is a local day: blocking 25 December removes every slot that starts on that local date, whatever timezone the member views it in. Slot generation takes the blocked dates as an input, so the member calendar, booking, rescheduling and the professional preview all share one rule, and the booking and reschedule transactions re-read the blocked dates after locking the professional's user row. Blocking takes the same row lock, so a booking either commits before the block (and is reported on the blocked date) or sees the block and is rejected.

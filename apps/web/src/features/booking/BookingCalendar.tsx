@@ -5,6 +5,7 @@ import type {
   Booking,
   ProfessionalProfile,
 } from '@thoughtfull/shared';
+import { MIN_BOOKING_NOTICE_MINUTES } from '@thoughtfull/shared';
 import { createBooking, getBookingCalendar } from '../../lib/bookings';
 
 function localDate(instant: string, timezone: string) {
@@ -136,7 +137,8 @@ export function BookingCalendar({
       <h3 className="text-xl font-semibold text-ink">Choose a date and time</h3>
       <p className="mt-2 text-sm text-copy">
         Next 4 weeks. All dates and times are shown in your timezone:{' '}
-        <strong>{timezone}</strong>.
+        <strong>{timezone}</strong>. Sessions must be booked at least{' '}
+        {MIN_BOOKING_NOTICE_MINUTES / 60} hours ahead.
       </p>
       {confirmed && (
         <div

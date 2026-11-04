@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AvailabilityStore, BookingStore } from '@thoughtfull/db';
 import {
+  MIN_BOOKING_NOTICE_MINUTES,
   generateAvailabilitySlots,
   todayInTimezone,
   validateBlockedDate,
@@ -160,6 +161,7 @@ export async function registerAvailability(
       now().toISOString(),
       user.timezone,
       blocked.map((entry) => entry.date),
+      MIN_BOOKING_NOTICE_MINUTES,
     );
 
     return bookings

@@ -1,1 +1,2 @@
 export const SESSION_DURATION_MINUTES = 50;
+export const MIN_BOOKING_NOTICE_MINUTES = 120;

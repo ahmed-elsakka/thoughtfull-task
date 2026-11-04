@@ -688,7 +688,7 @@ it('checks server time again after acquiring participant locks', async () => {
   const member = await user('member');
   const professional = await user('professional');
   const calls = [
-    new Date('2026-11-02T08:59:59Z'),
+    new Date('2026-11-02T06:59:59Z'),
     new Date('2026-11-02T09:00:00Z'),
   ];
   await expect(
@@ -705,8 +705,8 @@ it('checks server time again after acquiring participant locks', async () => {
 });
 
 it.each([
-  ['2026-11-02T08:00:00Z', 2],
-  ['2026-11-02T08:00:01Z', 0],
+  ['2026-11-02T07:00:00Z', 2],
+  ['2026-11-01T09:00:01Z', 2],
   ['2026-11-01T09:00:00Z', 4],
 ])(
   'schedules only unpassed reminders for both people at clock %s',
@@ -1127,5 +1127,121 @@ describe('blocked dates', () => {
     const starts = calendar.slots.map((slot) => slot.startsAt);
     expect(starts).not.toContain('2026-11-04T20:00:00Z');
     expect(starts).toContain('2026-11-05T20:00:00Z');
+  });
+});
+
+describe('minimum booking notice', () => {
+  const nearBy = (offsetMs: number) =>
+    new Date(Date.parse('2026-11-02T09:00:00Z') - offsetMs);
+  const hour = 3_600_000;
+
+  it('allows a start exactly two hours ahead and rejects anything sooner', async () => {
+    const member = await user('member');
+    const professional = await user('professional');
+    clock = nearBy(2 * hour - 1000);
+    const early = await book(member.cookie, professional.id);
+    expect(early.statusCode).toBe(400);
+    expect(early.json().message).toBe(
+      'Sessions must be booked at least 2 hours ahead.',
+    );
+    expect(
+      (await fixture.database.query('SELECT * FROM bookings')).rows,
+    ).toHaveLength(0);
+    clock = nearBy(2 * hour);
+    expect((await book(member.cookie, professional.id)).statusCode).toBe(201);
+  });
+
+  it('hides slots inside the notice window from the member calendar', async () => {
+    const member = await user('member');
+    const professional = await user('professional');
+    clock = new Date('2026-11-02T10:30:00Z');
+    const calendar = await createBookingStore(fixture.sql).calendar(
+      member.id,
+      professional.id,
+      clock,
+    );
+    const starts = calendar.slots.map((slot) => slot.startsAt);
+    // Opening hours are 09:00-17:00 UTC; 12:30 is the earliest allowed start.
+    expect(starts[0]).toBe('2026-11-02T13:00:00Z');
+    expect(starts).not.toContain('2026-11-02T12:00:00Z');
+    expect(starts).not.toContain('2026-11-02T11:00:00Z');
+  });
+
+  it('applies the same notice when rescheduling and keeps the original session', async () => {
+    const member = await user('member');
+    const professional = await user('professional');
+    clock = new Date('2026-11-01T00:00:00Z');
+    const original = (
+      await book(member.cookie, professional.id, '2026-11-04T09:00:00Z')
+    ).json().booking;
+    clock = nearBy(hour / 2);
+    const rejected = await change(
+      member.cookie,
+      original.id,
+      'reschedule',
+      original.startsAt,
+      '2026-11-02T10:00:00Z',
+    );
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().message).toContain('2 hours');
+    expect(
+      await createBookingStore(fixture.sql).find(member.id, original.id),
+    ).toEqual(original);
+    const offered = await createBookingStore(fixture.sql).rescheduleSlots(
+      member.id,
+      original.id,
+      clock,
+    );
+    expect(offered.slots.map((slot) => slot.startsAt)).not.toContain(
+      '2026-11-02T10:00:00Z',
+    );
+    clock = nearBy(2 * hour);
+    expect(
+      (
+        await change(
+          member.cookie,
+          original.id,
+          'reschedule',
+          original.startsAt,
+          '2026-11-02T11:00:00Z',
+        )
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  it('keeps a replayed booking valid even after its notice window has passed', async () => {
+    const member = await user('member');
+    const professional = await user('professional');
+    clock = nearBy(3 * hour);
+    const requestId = randomUUID();
+    const send = () =>
+      app.inject({
+        method: 'POST',
+        url: '/api/bookings',
+        headers: { ...headers, cookie: member.cookie },
+        payload: {
+          professionalId: professional.id,
+          startsAt: '2026-11-02T09:00:00Z',
+          requestId,
+        },
+      });
+    expect((await send()).statusCode).toBe(201);
+    clock = nearBy(hour);
+    const replay = await send();
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().replayed).toBe(true);
+  });
+
+  it('never skips the one-hour reminder on a valid booking', async () => {
+    const member = await user('member');
+    const professional = await user('professional');
+    clock = nearBy(2 * hour);
+    await book(member.cookie, professional.id);
+    const rows = (
+      await fixture.database.query<{ offset_minutes: number }>(
+        'SELECT offset_minutes FROM booking_reminders',
+      )
+    ).rows;
+    expect(rows.map((row) => row.offset_minutes)).toEqual([60, 60]);
   });
 });

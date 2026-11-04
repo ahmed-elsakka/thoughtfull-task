@@ -143,6 +143,7 @@ export function generateAvailabilitySlots(
   now: string,
   viewerTimezone = timezone,
   blockedDates: readonly string[] = [],
+  minNoticeMinutes = 0,
 ): SlotPreview {
   const error = validateWorkingDays(days);
 
@@ -162,6 +163,8 @@ export function generateAvailabilitySlots(
     .add({ days: 1 });
   const slots: AvailabilitySlot[] = [];
   const blocked = new Set(blockedDates);
+  // A start exactly at the minimum notice is still bookable; anything sooner is not.
+  const earliest = instant.add({ minutes: minNoticeMinutes });
 
   for (
     let date = professionalStart;
@@ -198,6 +201,8 @@ export function generateAvailabilitySlots(
           .toInstant();
 
         if (Temporal.Instant.compare(start, instant) <= 0) continue;
+
+        if (Temporal.Instant.compare(start, earliest) < 0) continue;
 
         if (
           Temporal.Instant.compare(start, windowStart) < 0 ||
