@@ -15,3 +15,5 @@ export * from './availability.js';
 export * from './professionals.js';
 
 export * from './bookings.js';
+
+export * from './notifications.js';

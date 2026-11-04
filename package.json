@@ -25,7 +25,9 @@
     "pretypecheck": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db",
     "pretest:e2e": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db",
     "test:postgres": "tsx tests/integration/booking-concurrency.ts",
-    "pretest:postgres": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db"
+    "pretest:postgres": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db",
+    "build:services": "npm run build -w @thoughtfull/shared && npm run build -w @thoughtfull/db && npm run build -w @thoughtfull/api && npm run build -w @thoughtfull/worker",
+    "dev:all": "npm run build:services && concurrently -k -n api,web,worker \"npm run start -w @thoughtfull/api\" \"npm run dev -w @thoughtfull/web\" \"npm run start -w @thoughtfull/worker\""
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.15",

@@ -32,7 +32,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await fixture.database.exec(
-    'TRUNCATE booking_reminders, bookings, professional_availability, auth_sessions, users',
+    'TRUNCATE notifications, booking_reminders, bookings, professional_availability, professional_blocked_dates, auth_sessions, users',
   );
   app = buildApp({
     logger: false,

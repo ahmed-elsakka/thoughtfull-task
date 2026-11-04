@@ -96,7 +96,9 @@ try {
     'PASS: concurrent members cannot book the same professional slot.',
   );
 
-  await database.pool.query('TRUNCATE booking_reminders, bookings');
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
   const sameMember = await Promise.allSettled([
     database.bookingStore.book(
       member,
@@ -121,7 +123,9 @@ try {
     'PASS: one member cannot concurrently book overlapping sessions with different professionals.',
   );
 
-  await database.pool.query('TRUNCATE booking_reminders, bookings');
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
   const retries = await Promise.all([
     database.bookingStore.book(member, input, now),
     database.bookingStore.book(member, input, now),
@@ -139,7 +143,9 @@ try {
     'PASS: simultaneous retries create one booking and one reminder set.',
   );
 
-  await database.pool.query('TRUNCATE booking_reminders, bookings');
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
   const insert = (memberId: string) =>
     database!.pool.query(
       'INSERT INTO bookings (id, member_id, professional_id, request_id, starts_at, ends_at) VALUES ($1, $2, $3, $4, $5, $6)',
@@ -163,6 +169,217 @@ try {
   );
   console.log(
     'PASS: database exclusion constraints protect direct concurrent SQL writes.',
+  );
+
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
+  const original = (await database.bookingStore.book(member, input, now))
+    .booking;
+  const target = '2026-11-05T10:00:00Z';
+  const competing = await Promise.allSettled([
+    database.bookingStore.reschedule(
+      member,
+      original.id,
+      { expectedStartsAt: original.startsAt, startsAt: target },
+      now,
+    ),
+    database.bookingStore.book(
+      other,
+      { ...input, startsAt: target, requestId: randomUUID() },
+      now,
+    ),
+  ]);
+  assert.equal(competing.filter((r) => r.status === 'fulfilled').length, 1);
+  const retained = await database.bookingStore.find(member, original.id);
+  assert.ok(retained);
+  assert.equal(retained.status, 'confirmed');
+  assert.equal(
+    retained.startsAt,
+    competing[0]!.status === 'fulfilled'
+      ? new Date(target).toISOString()
+      : original.startsAt,
+  );
+  console.log(
+    'PASS: a reschedule racing a new booking keeps exactly one valid member session.',
+  );
+
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
+  const toMove = (await database.bookingStore.book(member, input, now)).booking;
+  const moves = await Promise.allSettled([
+    database.bookingStore.reschedule(
+      member,
+      toMove.id,
+      { expectedStartsAt: toMove.startsAt, startsAt: target },
+      now,
+    ),
+    database.bookingStore.reschedule(
+      member,
+      toMove.id,
+      { expectedStartsAt: toMove.startsAt, startsAt: '2026-11-06T10:00:00Z' },
+      now,
+    ),
+  ]);
+  assert.equal(moves.filter((r) => r.status === 'fulfilled').length, 1);
+  assert.equal(
+    (await database.pool.query('SELECT * FROM bookings')).rowCount,
+    1,
+  );
+  assert.equal(
+    (await database.pool.query('SELECT * FROM booking_reminders')).rowCount,
+    4,
+  );
+  console.log(
+    'PASS: concurrent reschedules cannot overwrite each other or duplicate sessions/reminders.',
+  );
+
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
+  const toChange = (await database.bookingStore.book(member, input, now))
+    .booking;
+  const changes = await Promise.allSettled([
+    database.bookingStore.cancel(
+      professional,
+      'professional',
+      toChange.id,
+      { expectedStartsAt: toChange.startsAt },
+      now,
+    ),
+    database.bookingStore.reschedule(
+      member,
+      toChange.id,
+      { expectedStartsAt: toChange.startsAt, startsAt: target },
+      now,
+    ),
+  ]);
+  assert.equal(changes.filter((r) => r.status === 'fulfilled').length, 1);
+  const final = await database.bookingStore.find(member, toChange.id);
+  assert.equal(
+    final!.status,
+    changes[0]!.status === 'fulfilled' ? 'cancelled' : 'confirmed',
+  );
+  assert.equal(
+    (await database.pool.query('SELECT * FROM booking_reminders')).rowCount,
+    final!.status === 'cancelled' ? 0 : 4,
+  );
+  console.log(
+    'PASS: cancellation racing rescheduling leaves a consistent session and reminder state.',
+  );
+
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
+  const dueAt = new Date('2026-11-03T09:00:00Z');
+  await database.bookingStore.book(member, input, now);
+  const deliveries = await Promise.all([
+    database.notificationStore.deliverDue(dueAt),
+    database.notificationStore.deliverDue(dueAt),
+    database.notificationStore.deliverDue(dueAt),
+  ]);
+  assert.equal(
+    deliveries.reduce((sum, count) => sum + count, 0),
+    2,
+  );
+  assert.equal(
+    (await database.pool.query('SELECT * FROM notifications')).rowCount,
+    2,
+  );
+  assert.equal(
+    (
+      await database.pool.query(
+        'SELECT * FROM booking_reminders WHERE delivered_at IS NOT NULL',
+      )
+    ).rowCount,
+    2,
+  );
+  assert.equal(await database.notificationStore.deliverDue(dueAt), 0);
+  console.log(
+    'PASS: concurrent workers deliver each due reminder exactly once.',
+  );
+
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
+  const cancelReminder = (await database.bookingStore.book(member, input, now))
+    .booking;
+  await Promise.all([
+    database.notificationStore.deliverDue(dueAt),
+    database.bookingStore.cancel(
+      professional,
+      'professional',
+      cancelReminder.id,
+      { expectedStartsAt: cancelReminder.startsAt },
+      () => dueAt,
+    ),
+  ]);
+  const beforeCancelRetry = (
+    await database.pool.query('SELECT * FROM notifications')
+  ).rowCount;
+  assert.ok(beforeCancelRetry === 0 || beforeCancelRetry === 2);
+  assert.equal(
+    await database.notificationStore.deliverDue(
+      new Date('2026-11-05T00:00:00Z'),
+    ),
+    0,
+  );
+  assert.equal(
+    (await database.pool.query('SELECT * FROM notifications')).rowCount,
+    beforeCancelRetry,
+  );
+  assert.equal(
+    (
+      await database.pool.query(
+        'SELECT * FROM booking_reminders WHERE delivered_at IS NULL',
+      )
+    ).rowCount,
+    0,
+  );
+  console.log(
+    'PASS: cancellation racing delivery retires pending reminders and preserves committed notifications.',
+  );
+
+  await database.pool.query(
+    'TRUNCATE notifications, booking_reminders, bookings',
+  );
+  const moveReminder = (await database.bookingStore.book(member, input, now))
+    .booking;
+  await Promise.all([
+    database.notificationStore.deliverDue(dueAt),
+    database.bookingStore.reschedule(
+      member,
+      moveReminder.id,
+      {
+        expectedStartsAt: moveReminder.startsAt,
+        startsAt: '2026-11-06T09:00:00Z',
+      },
+      () => dueAt,
+    ),
+  ]);
+  const beforeMoveRetry = (
+    await database.pool.query('SELECT * FROM notifications')
+  ).rowCount;
+  assert.ok(beforeMoveRetry === 0 || beforeMoveRetry === 2);
+  assert.equal(
+    await database.notificationStore.deliverDue(
+      new Date('2026-11-04T08:00:00Z'),
+    ),
+    0,
+  );
+  assert.equal(
+    await database.notificationStore.deliverDue(
+      new Date('2026-11-05T09:00:00Z'),
+    ),
+    2,
+  );
+  assert.equal(
+    (await database.pool.query('SELECT * FROM notifications')).rowCount,
+    beforeMoveRetry! + 2,
+  );
+  console.log(
+    'PASS: rescheduling racing delivery prevents obsolete pending notifications and delivers the new reminder set.',
   );
 } finally {
   await database?.pool.end();

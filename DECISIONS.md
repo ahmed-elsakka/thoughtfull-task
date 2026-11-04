@@ -7,18 +7,24 @@
 - PostgreSQL with Drizzle; explicit SQL migrations for constraints the ORM cannot express.
 - Separate worker entry point, sharing the database package. No external queue service initially.
 
-## Booking and reminder roadmap
+## Booking and reminder design
 
 - Prevent overlaps for both professionals and members with PostgreSQL exclusion constraints on active bookings using half-open time ranges.
 - Reschedule and update pending reminders in one transaction; failures preserve the original session.
 - Store booking instants as timestamptz; reuse the implemented local-time availability rules below.
-- Revalidate generated availability and booking conflicts inside the future booking transaction.
+- Revalidate generated availability and booking conflicts inside the booking transaction.
 - Persist reminders; insert notifications and mark reminders delivered atomically, with a unique reminder reference. Coordinate booking changes and delivery using consistent locks.
 - Server-side session authentication and ownership checks on every protected endpoint.
 
+## Blocked dates
+
+Optional extra from the brief. A blocked date is a calendar date (`date` column) in the professional's own timezone, not an instant, because a holiday is a local day: blocking 25 December removes every slot that starts on that local date, whatever timezone the member views it in. Slot generation takes the blocked dates as an input, so the member calendar, booking, rescheduling and the professional preview all share one rule, and the booking and reschedule transactions re-read the blocked dates after locking the professional's user row. Blocking takes the same row lock, so a booking either commits before the block (and is reported on the blocked date) or sees the block and is rejected.
+
+Blocking a date does not cancel existing sessions. Silently cancelling a member's session would be worse than leaving it for the professional to handle, who can already cancel at any time. Instead the blocked-date list shows how many confirmed sessions remain on each date. Dates must be today or later and within 365 days to keep the table small and avoid typos far in the future. Past blocked dates are not listed. Known limitation: there is no single "block a range" action, so a week-long holiday needs one entry per day.
+
 ## Follow-up work
 
-Implement My sessions, cancellation/rescheduling, notifications, and worker. Authentication, professional availability, and member professional browsing are implemented. Add booking boundary, concurrency, DST, privacy, and reminder restart tests. Add full-app Compose and CI after the core flow works.
+The required application flows are implemented. `npm run dev:all` runs compiled services because two `tsx watch` processes started together hung on one Windows development machine; the cause was not investigated, and watch mode remains available per workspace. Add full-app Compose, CI, operational monitoring, database query timeouts, and broader browser coverage. Browser execution remains constrained by this Windows sandbox.
 
 ## Production considerations to address
 
@@ -72,6 +78,32 @@ Transactions lock participant user rows in UUID order, coordinating with availab
 
 A member-scoped request UUID makes retries idempotent. Repeating the key returns the existing booking; using it for another professional/start gets 409. The UI preserves the key through retries and disables confirmation during submission. Calendar responses exclude both professional conflicts and the requesting member's overlaps, revealing only free instants. Booking receipt reads enforce ownership.
 
-The same transaction inserts durable reminders for both people at 24 hours and one hour before start. Skip reminder times strictly before acceptance; retain one due exactly now. Unique booking/recipient/offset rows prevent duplicate scheduling. Delivery and cancellation/reschedule updates remain future work.
+The same transaction inserts durable reminders for both people at 24 hours and one hour before start. Skip reminder times strictly before acceptance; retain one due exactly now. Unique booking/recipient/offset rows prevent duplicate scheduling. Delivery and cancellation/reschedule updates are described below.
 
 PGlite tests exercise the actual SQL migration and btree_gist constraints. Independent connections to a disposable local PostgreSQL database verify simultaneous claims, member overlaps, idempotent retries, and direct SQL enforcement. The calendar UI pins the chosen date after confirmation so removing the last slot does not silently jump to another date.
+
+## My sessions
+
+Classify by end time: a confirmed session remains Upcoming while in progress, and becomes Past exactly at its end. This keeps an active session visible in the professional schedule. Upcoming is earliest first; Past is latest first, with UUID ties for deterministic pagination. Cancelled future bookings are excluded from Upcoming; ended cancelled bookings remain in member history with their status. No cancellation UI is introduced by this feature.
+
+Use the server clock and compare UTC instants in SQL, then format both endpoints in the viewer's saved timezone in the UI. Identity and role come only from authentication. Join only the counterpart name and whitelist response fields; member emails and other private data never appear. Professionals have the upcoming view required by the brief. Offset pagination uses 20 rows and a lookahead; concurrent bookings or the passage of time can shift page boundaries, an acceptable tradeoff for this small app. Poll every 30 seconds and invalidate the member's list after booking.
+
+## Cancel and reschedule
+
+The member cutoff is 24 elapsed hours before the existing session, inclusive at exactly 24 hours. It uses instants, so DST and local calendar dates cannot change the deadline. Check after participant locks and again just before a reschedule update. A replacement must be a future offered slot in the member's four-week window, but needs no minimum notice. Professionals may cancel at any time; rescheduling is member-only and keeps the same professional.
+
+Lock participant user rows in the same UUID order as booking/availability, then lock and reread the owned booking. Rescheduling updates that row; exclusion constraints validate both participants against other confirmed sessions. The slot picker excludes the owned booking from conflicts so shifting working hours can permit a replacement overlapping the old session. Everything commits together, including reminder replacement. No temporary cancellation or separate new booking is used.
+
+The client sends expectedStartsAt as an optimistic precondition, never as identity or the authoritative deadline. A stale request gets 409 instead of overwriting another move. Repeated cancellation is a no-op. Reschedule retries with a stale precondition return 409; refreshing reveals the committed move without creating duplicate sessions. This simple timestamp precondition is not a full revision history (a move away and back to the same start is indistinguishable); use a version column and operation ledger for more advanced audit/idempotency needs.
+
+Cancellation removes only undelivered reminders. Rescheduling retires the old reminder records and creates only still-relevant reminders for the new start. The worker coordinates on participant and booking locks; delivered notification snapshots persist independently of the retired reminder records. Original booking-request retries after a move may return a conflict because the requested start no longer matches; the session list is the source of truth after edits.
+
+## Reminder delivery and polling
+
+Use PostgreSQL as the durable queue; no Redis or in-memory per-session timers. The worker runs sequential passes every five seconds, bounded to 50 candidate bookings, with retry on the next pass after a failure. Candidates are only hints: reread status and due reminders under locks. The complete order is participant users in UUID order, booking, then reminders. An initial booking-only lock design caused a real PostgreSQL deadlock because inserting notification recipient foreign keys takes user locks; the concurrency test exposed it and the worker now follows the same order as booking changes.
+
+Insert notifications and set delivered_at in one transaction. A unique immutable source_reminder_id is an additional safeguard, deliberately without a reminder foreign key so rescheduling can delete old reminders without deleting notification history. Notification records retain counterpart name, session start, reminder offset, scheduled time, and delivery time. Notifications use factual session timestamps rather than relative claims that could become wrong after a delayed delivery or reschedule.
+
+Exactly once means one persisted in-app notification per reminder, not exactly one worker execution or exactly one browser display. On restart, overdue reminders catch up for confirmed bookings, even if the session has since started or ended. Cancelled bookings are excluded. If delivery commits before a change, its notification remains history; if the change commits first, obsolete reminders cannot be delivered. Graceful shutdown waits for the current pass. Multiple workers are safe, although participant locking intentionally serializes work for the same people; more throughput and backlog fairness can be added if scale requires it.
+
+The frontend polls every 15 seconds while active and refetches on focus/reconnection. Cache keys include user identity and page, and the request consumes React Query's abort signal so logout/unmount can cancel stale reads. Mark-as-read is an owned idempotent update; unread count includes all pages. Offset pagination is adequate for this small app but new deliveries can shift pages, so use cursor pagination at larger scale. No network push, email, SMS, or external delivery is involved.

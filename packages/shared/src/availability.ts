@@ -24,6 +24,18 @@ export interface WeeklyAvailability {
   days: WorkingDay[];
 }
 
+export const BLOCKED_DATE_HORIZON_DAYS = 365;
+
+export interface BlockedDate {
+  date: string;
+  confirmedSessions: number;
+}
+
+export interface BlockedDates {
+  timezone: string;
+  dates: BlockedDate[];
+}
+
 export interface AvailabilitySlot {
   startsAt: string;
   endsAt: string;
@@ -86,11 +98,51 @@ export function validateWorkingDays(days: WorkingDay[]): string | null {
   return null;
 }
 
+export function todayInTimezone(now: Date, timezone: string): string {
+  return Temporal.Instant.from(now.toISOString())
+    .toZonedDateTimeISO(timezone)
+    .toPlainDate()
+    .toString();
+}
+
+// Blocked dates are calendar dates in the professional's own timezone.
+export function validateBlockedDate(
+  date: unknown,
+  today: string,
+): string | null {
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date))
+    return 'Choose a valid date.';
+
+  let parsed: Temporal.PlainDate;
+
+  try {
+    parsed = Temporal.PlainDate.from(date, { overflow: 'reject' });
+  } catch {
+    return 'Choose a valid date.';
+  }
+
+  const first = Temporal.PlainDate.from(today);
+
+  if (Temporal.PlainDate.compare(parsed, first) < 0)
+    return 'Choose today or a future date.';
+
+  if (
+    Temporal.PlainDate.compare(
+      parsed,
+      first.add({ days: BLOCKED_DATE_HORIZON_DAYS }),
+    ) > 0
+  )
+    return `Choose a date within the next ${BLOCKED_DATE_HORIZON_DAYS} days.`;
+
+  return null;
+}
+
 export function generateAvailabilitySlots(
   days: WorkingDay[],
   timezone: string,
   now: string,
   viewerTimezone = timezone,
+  blockedDates: readonly string[] = [],
 ): SlotPreview {
   const error = validateWorkingDays(days);
 
@@ -109,6 +161,7 @@ export function generateAvailabilitySlots(
     .toPlainDate()
     .add({ days: 1 });
   const slots: AvailabilitySlot[] = [];
+  const blocked = new Set(blockedDates);
 
   for (
     let date = professionalStart;
@@ -118,6 +171,9 @@ export function generateAvailabilitySlots(
     const day = days.find((value) => value.dayOfWeek === date.dayOfWeek)!;
 
     if (day.startTime === null || day.endTime === null) continue;
+
+    // A blocked date removes every slot that starts on that professional-local date.
+    if (blocked.has(date.toString())) continue;
 
     const closing = timeToMinutes(day.endTime);
 

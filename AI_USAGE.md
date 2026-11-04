@@ -31,3 +31,15 @@ Codex implemented the member directory/profile UI, paginated professional querie
 Codex implemented member-timezone calendars, confirmation UI, booking APIs, transactional persistence, exclusion constraints, retry idempotency, and reminder scheduling records. It added real PostgreSQL concurrency checks alongside embedded database tests.
 
 Concrete refinement: 28 professional-local dates can omit valid slots at a member-local window boundary across the date line. Generation now enumerates all professional dates intersecting the member window, with a regression test. The selected UI date is pinned after confirmation so a newly empty date does not switch silently to another date.
+
+## My sessions
+
+Codex implemented authenticated session lists, role-specific views, timezone formatting, pagination, booking cache invalidation, and database-backed API tests. The implementation keeps ongoing sessions in Upcoming until they end, rather than hiding them as soon as they start; exact end-boundary tests cover this choice. The booking browser scenario also checks that My sessions updates after booking and survives reload.
+
+## Cancel and reschedule
+
+Codex added confirmation controls, member-timezone replacement slots, ownership/CSRF checks, exact 24-hour enforcement, participant locking, atomic booking/reminder updates, and stale-request protection. Tests cover conflict and reminder-failure rollback plus real PostgreSQL races between moves, new bookings, and cancellations. Testing exposed an initial string comparison between equivalent UTC timestamps with different millisecond formatting; this was corrected to compare instants.
+
+## Reminders and polling
+
+Codex implemented durable notification delivery, the polling worker, protected notification APIs, unread/read state, and the 15-second polling UI. Tests cover exact due times, overdue recovery, rollback, ownership, and delivery/change races. A real PostgreSQL race exposed implicit user foreign-key locks: the initial booking-only worker lock order deadlocked with cancellation. The implementation was corrected to acquire participant users in UUID order before booking/reminder locks, and the concurrency checks passed. The migration was generated using Drizzle's programmatic API because its CLI hit the Windows user-info lookup issue.

@@ -1,5 +1,6 @@
 import {
   emptyWeek,
+  type BlockedDate,
   timeToMinutes,
   validateWorkingDays,
   type WorkingDay,
@@ -9,6 +10,12 @@ import type { SqlDatabase, SqlExecutor } from './auth.js';
 export interface AvailabilityStore {
   getWeek(professionalId: string): Promise<WorkingDay[]>;
   replaceWeek(professionalId: string, days: WorkingDay[]): Promise<void>;
+  listBlockedDates(
+    professionalId: string,
+    today: string,
+  ): Promise<BlockedDate[]>;
+  blockDate(professionalId: string, date: string): Promise<boolean>;
+  unblockDate(professionalId: string, date: string): Promise<void>;
 }
 
 function minuteToTime(value: number): string {
@@ -21,6 +28,59 @@ export function createAvailabilityStore(
   return {
     async getWeek(professionalId) {
       return readWorkingWeek(database, professionalId);
+    },
+
+    async listBlockedDates(professionalId, today) {
+      const { rows } = await database.query<{
+        blocked_date: string;
+        sessions: string;
+      }>(
+        `SELECT d.blocked_date::text AS blocked_date,
+           (SELECT count(*) FROM bookings b
+            WHERE b.professional_id = d.professional_id AND b.status = 'confirmed'
+            AND (b.starts_at AT TIME ZONE u.timezone)::date = d.blocked_date) AS sessions
+         FROM professional_blocked_dates d JOIN users u ON u.id = d.professional_id
+         WHERE d.professional_id = $1 AND d.blocked_date >= $2::date
+         ORDER BY d.blocked_date`,
+        [professionalId, today],
+      );
+
+      return rows.map((row) => ({
+        date: row.blocked_date,
+        confirmedSessions: Number(row.sessions),
+      }));
+    },
+
+    async blockDate(professionalId, date) {
+      return database.transaction(async (db) => {
+        // Same professional row lock as bookings and working-hours updates.
+        const { rows: owner } = await db.query(
+          "SELECT id FROM users WHERE id = $1 AND role = 'professional' FOR UPDATE",
+          [professionalId],
+        );
+
+        if (owner.length !== 1) throw new Error('Professional not found.');
+
+        const { rows } = await db.query(
+          'INSERT INTO professional_blocked_dates (professional_id, blocked_date) VALUES ($1, $2::date) ON CONFLICT DO NOTHING RETURNING blocked_date',
+          [professionalId, date],
+        );
+
+        return rows.length === 1;
+      });
+    },
+
+    async unblockDate(professionalId, date) {
+      await database.transaction(async (db) => {
+        await db.query(
+          "SELECT id FROM users WHERE id = $1 AND role = 'professional' FOR UPDATE",
+          [professionalId],
+        );
+        await db.query(
+          'DELETE FROM professional_blocked_dates WHERE professional_id = $1 AND blocked_date = $2::date',
+          [professionalId, date],
+        );
+      });
     },
 
     async replaceWeek(professionalId, days) {
@@ -58,6 +118,18 @@ export function createAvailabilityStore(
       });
     },
   };
+}
+
+export async function readBlockedDates(
+  database: SqlExecutor,
+  professionalId: string,
+): Promise<string[]> {
+  const { rows } = await database.query<{ blocked_date: string }>(
+    'SELECT blocked_date::text AS blocked_date FROM professional_blocked_dates WHERE professional_id = $1',
+    [professionalId],
+  );
+
+  return rows.map((row) => row.blocked_date);
 }
 
 export async function readWorkingWeek(

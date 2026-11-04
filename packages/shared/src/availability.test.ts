@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   emptyWeek,
   generateAvailabilitySlots,
+  validateBlockedDate,
   validateWorkingDays,
 } from './availability.js';
 
@@ -207,4 +208,92 @@ it('covers all 28 viewer-local dates across opposite sides of the date line', ()
         Date.parse(slot.startsAt) < Date.parse('2026-11-30T10:00:00Z'),
     ),
   ).toBe(true);
+});
+
+describe('blocked dates', () => {
+  const mondays = week(1, '09:00', '17:00');
+  const now = '2026-11-02T00:00:00Z';
+
+  it('removes every slot on a blocked date and leaves other dates alone', () => {
+    const open = generateAvailabilitySlots(mondays, 'UTC', now);
+    const blocked = generateAvailabilitySlots(mondays, 'UTC', now, 'UTC', [
+      '2026-11-09',
+    ]);
+    expect(open.slots).toHaveLength(32);
+    expect(blocked.slots).toHaveLength(24);
+    expect(
+      blocked.slots.some((slot) => slot.startsAt.startsWith('2026-11-09')),
+    ).toBe(false);
+    expect(blocked.slots).toEqual(
+      open.slots.filter((slot) => !slot.startsAt.startsWith('2026-11-09')),
+    );
+  });
+
+  it('treats an empty or irrelevant blocked list as no restriction', () => {
+    const open = generateAvailabilitySlots(mondays, 'UTC', now);
+    expect(generateAvailabilitySlots(mondays, 'UTC', now, 'UTC', [])).toEqual(
+      open,
+    );
+    // A Tuesday has no working hours, and a date beyond the window is irrelevant.
+    expect(
+      generateAvailabilitySlots(mondays, 'UTC', now, 'UTC', [
+        '2026-11-03',
+        '2027-06-01',
+      ]),
+    ).toEqual(open);
+  });
+
+  it('blocks by the professional-local date, not the UTC or viewer date', () => {
+    // 09:00-16:00 NZDT (UTC+13) on Monday 9 November is Sunday 8 November in UTC.
+    const hours = week(1, '09:00', '17:00');
+    const open = generateAvailabilitySlots(
+      hours,
+      'Pacific/Auckland',
+      '2026-11-01T00:00:00Z',
+      'UTC',
+    );
+    const blocked = generateAvailabilitySlots(
+      hours,
+      'Pacific/Auckland',
+      '2026-11-01T00:00:00Z',
+      'UTC',
+      ['2026-11-09'],
+    );
+    const removed = open.slots.filter(
+      (slot) => !blocked.slots.some((kept) => kept.startsAt === slot.startsAt),
+    );
+    expect(removed).toHaveLength(8);
+    expect(removed[0]!.startsAt).toBe('2026-11-08T20:00:00Z');
+    expect(removed[7]!.startsAt).toBe('2026-11-09T03:00:00Z');
+    // Blocking the UTC date of those starts does not remove the Monday sessions.
+    expect(
+      generateAvailabilitySlots(
+        hours,
+        'Pacific/Auckland',
+        '2026-11-01T00:00:00Z',
+        'UTC',
+        ['2026-11-08'],
+      ).slots,
+    ).toHaveLength(open.slots.length);
+  });
+
+  it('validates dates against the professional-local today', () => {
+    const today = '2026-11-02';
+    expect(validateBlockedDate('2026-11-02', today)).toBeNull();
+    expect(validateBlockedDate('2026-12-25', today)).toBeNull();
+    expect(validateBlockedDate('2027-11-02', today)).toBeNull();
+    expect(validateBlockedDate('2027-11-03', today)).toContain('365');
+    expect(validateBlockedDate('2026-11-01', today)).toContain('future');
+    for (const value of [
+      '2026-02-30',
+      '2026-13-01',
+      '2026-1-5',
+      '2026-11-02T10:00',
+      'tomorrow',
+      '',
+      null,
+      20261102,
+    ])
+      expect(validateBlockedDate(value, today)).toBe('Choose a valid date.');
+  });
 });

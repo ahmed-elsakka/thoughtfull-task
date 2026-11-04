@@ -7,11 +7,13 @@ import { createAvailabilityStore } from './availability.js';
 import { createProfessionalStore } from './professionals.js';
 
 import { createBookingStore } from './bookings.js';
+import { createNotificationStore } from './notifications.js';
 
 export * from './bookings.js';
 export * from './professionals.js';
 export * from './auth.js';
 export * from './availability.js';
+export * from './notifications.js';
 
 export function createDatabase(connectionString: string) {
   const pool = new pg.Pool({ connectionString });
@@ -43,5 +45,6 @@ export function createDatabase(connectionString: string) {
     availabilityStore: createAvailabilityStore(sql),
     professionalStore: createProfessionalStore(sql),
     bookingStore: createBookingStore(sql),
+    notificationStore: createNotificationStore(sql),
   };
 }

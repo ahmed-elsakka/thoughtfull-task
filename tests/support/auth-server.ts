@@ -4,6 +4,7 @@ import {
   createAvailabilityStore,
   createProfessionalStore,
   createBookingStore,
+  createNotificationStore,
 } from '@thoughtfull/db';
 import { buildApp } from '../../apps/api/src/app.js';
 import { createTestDatabase } from './database.js';
@@ -15,6 +16,7 @@ const app = buildApp({
   availability: createAvailabilityStore(sql),
   professionals: createProfessionalStore(sql),
   bookings: createBookingStore(sql),
+  notifications: createNotificationStore(sql),
   auth: {
     store: createAuthStore(sql),
     origin: 'http://127.0.0.1:5174',

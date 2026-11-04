@@ -27,6 +27,7 @@ const app = buildApp({
   availability: database.availabilityStore,
   professionals: database.professionalStore,
   bookings: database.bookingStore,
+  notifications: database.notificationStore,
 });
 
 app.addHook('onClose', async () => {
@@ -41,6 +42,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
 try {
   await database.pool.query('SELECT token_hash FROM auth_sessions LIMIT 0');
   await database.pool.query('SELECT id FROM bookings LIMIT 0');
+  await database.pool.query('SELECT id FROM notifications LIMIT 0');
   await database.pool.query(
     'SELECT professional_id FROM professional_availability LIMIT 0',
   );

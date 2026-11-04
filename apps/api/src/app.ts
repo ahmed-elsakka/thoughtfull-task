@@ -1,4 +1,7 @@
 import { registerBookings } from './modules/sessions/routes.js';
+import { registerMySessions } from './modules/sessions/my-sessions.js';
+import { registerNotifications } from './modules/notifications/routes.js';
+import type { NotificationStore } from '@thoughtfull/db';
 import type { BookingStore } from '@thoughtfull/db';
 import Fastify, { type FastifyError } from 'fastify';
 import { registerProfessionals } from './modules/professionals/routes.js';
@@ -16,6 +19,7 @@ export function buildApp(
     availability?: AvailabilityStore;
     professionals?: ProfessionalStore;
     bookings?: BookingStore;
+    notifications?: NotificationStore;
   } = {},
 ) {
   const app = Fastify({
@@ -60,7 +64,21 @@ export function buildApp(
     app.register(async (instance) => {
       await registerAuth(instance, options.auth!);
 
+      if (options.notifications) {
+        instance.register(async (child) =>
+          registerNotifications(
+            child,
+            options.notifications!,
+            options.auth?.now,
+          ),
+        );
+      }
+
       if (options.bookings) {
+        instance.register(async (child) =>
+          registerMySessions(child, options.bookings!, options.auth?.now),
+        );
+
         instance.register(async (child) =>
           registerBookings(child, options.bookings!, options.auth?.now),
         );

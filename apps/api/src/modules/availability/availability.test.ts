@@ -69,7 +69,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await fixture.database.exec(
-    'TRUNCATE booking_reminders, bookings, professional_availability, auth_sessions, users',
+    'TRUNCATE notifications, booking_reminders, bookings, professional_availability, professional_blocked_dates, auth_sessions, users',
   );
   app = makeApp();
 });
@@ -275,4 +275,167 @@ it('database constraints reject invalid ranges and duplicate weekday rows', asyn
       [user.id],
     ),
   ).rejects.toThrow();
+});
+
+function blockDate(cookie: string, body: unknown, extra = headers) {
+  return app.inject({
+    method: 'POST',
+    url: '/api/professional/blocked-dates',
+    headers: { ...extra, cookie },
+    payload: body,
+  });
+}
+
+function listBlocked(cookie: string) {
+  return app.inject({
+    url: '/api/professional/blocked-dates',
+    headers: { cookie },
+  });
+}
+
+it('blocks a date idempotently, persists it across restart, and unblocks it', async () => {
+  const user = await signup();
+  expect(await listBlocked(user.cookie).then((r) => r.json())).toEqual({
+    timezone: 'Asia/Singapore',
+    dates: [],
+  });
+  const first = await blockDate(user.cookie, { date: '2026-11-09' });
+  expect(first.statusCode).toBe(201);
+  expect(first.json()).toEqual({
+    timezone: 'Asia/Singapore',
+    dates: [{ date: '2026-11-09', confirmedSessions: 0 }],
+  });
+  expect(
+    (await blockDate(user.cookie, { date: '2026-11-09' })).statusCode,
+  ).toBe(200);
+  await blockDate(user.cookie, { date: '2026-11-03' });
+  await app.close();
+  app = makeApp();
+  expect(
+    (await listBlocked(user.cookie).then((r) => r.json())).dates.map(
+      (entry: { date: string }) => entry.date,
+    ),
+  ).toEqual(['2026-11-03', '2026-11-09']);
+  const removed = await app.inject({
+    method: 'DELETE',
+    url: '/api/professional/blocked-dates/2026-11-09',
+    headers: { ...headers, cookie: user.cookie },
+  });
+  expect(removed.statusCode).toBe(200);
+  expect(removed.json().dates).toEqual([
+    { date: '2026-11-03', confirmedSessions: 0 },
+  ]);
+  const again = await app.inject({
+    method: 'DELETE',
+    url: '/api/professional/blocked-dates/2026-11-09',
+    headers: { ...headers, cookie: user.cookie },
+  });
+  expect(again.statusCode).toBe(200);
+});
+
+it('rejects invalid, past, distant, and unexpected blocked-date input', async () => {
+  const user = await signup();
+  // The professional's local today is 2026-11-02 at the fixed test clock.
+  for (const body of [
+    { date: '2026-11-01' },
+    { date: '2026-02-30' },
+    { date: '2027-11-03' },
+    { date: 'next friday' },
+    { date: '2026-11-09', professionalId: 'someone-else' },
+    {},
+  ])
+    expect((await blockDate(user.cookie, body)).statusCode).toBe(400);
+
+  expect(
+    (await blockDate(user.cookie, { date: '2026-11-02' })).statusCode,
+  ).toBe(201);
+  expect(
+    (
+      await app.inject({
+        method: 'DELETE',
+        url: '/api/professional/blocked-dates/not-a-date',
+        headers: { ...headers, cookie: user.cookie },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(
+    (await listBlocked(user.cookie).then((r) => r.json())).dates,
+  ).toHaveLength(1);
+});
+
+it('requires a logged-in professional and CSRF headers for blocked dates', async () => {
+  const professional = await signup();
+  const member = await signup('member', 'member@example.test');
+  expect(
+    (await app.inject({ url: '/api/professional/blocked-dates' })).statusCode,
+  ).toBe(401);
+  expect((await listBlocked(member.cookie)).statusCode).toBe(403);
+  expect(
+    (await blockDate(member.cookie, { date: '2026-11-09' })).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await blockDate(
+        professional.cookie,
+        { date: '2026-11-09' },
+        {} as typeof headers,
+      )
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await app.inject({
+        method: 'DELETE',
+        url: '/api/professional/blocked-dates/2026-11-09',
+        headers: { cookie: professional.cookie },
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (await listBlocked(professional.cookie).then((r) => r.json())).dates,
+  ).toEqual([]);
+});
+
+it("keeps each professional's blocked dates private to them", async () => {
+  const first = await signup('professional', 'first@example.test');
+  const second = await signup('professional', 'second@example.test');
+  await blockDate(first.cookie, { date: '2026-11-09' });
+  expect(
+    (await listBlocked(second.cookie).then((r) => r.json())).dates,
+  ).toEqual([]);
+  // Removing a date that belongs to another professional changes nothing.
+  await app.inject({
+    method: 'DELETE',
+    url: '/api/professional/blocked-dates/2026-11-09',
+    headers: { ...headers, cookie: second.cookie },
+  });
+  expect(
+    (await listBlocked(first.cookie).then((r) => r.json())).dates,
+  ).toHaveLength(1);
+});
+
+it('removes a blocked date from the professional slot preview and restores it on unblock', async () => {
+  const user = await signup();
+  await save(user.cookie);
+  const preview = async () =>
+    (
+      await app.inject({
+        url: '/api/professional/availability/slots',
+        headers: { cookie: user.cookie },
+      })
+    ).json().slots as { startsAt: string }[];
+  expect(await preview()).toHaveLength(32);
+  await blockDate(user.cookie, { date: '2026-11-09' });
+  const blocked = await preview();
+  expect(blocked).toHaveLength(24);
+  // Monday 2026-11-09 09:00 Singapore time is 01:00 UTC the same day.
+  expect(blocked.some((slot) => slot.startsAt.startsWith('2026-11-09'))).toBe(
+    false,
+  );
+  await app.inject({
+    method: 'DELETE',
+    url: '/api/professional/blocked-dates/2026-11-09',
+    headers: { ...headers, cookie: user.cookie },
+  });
+  expect(await preview()).toHaveLength(32);
 });

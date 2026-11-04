@@ -92,4 +92,66 @@ test('a member selects a date and time, confirms, and cannot book that slot agai
         Date.parse(slot.startsAt) === Date.parse(result.booking.startsAt),
     ),
   ).toBe(false);
+
+  const sessions = page.getByRole('region', { name: 'My sessions' });
+  await expect(sessions).toContainText(name);
+  await expect(sessions).toContainText('America/New_York');
+  await sessions.getByRole('button', { name: 'Past', exact: true }).click();
+  await expect(sessions).toContainText('No past sessions yet.');
+  await sessions.getByRole('button', { name: 'Upcoming', exact: true }).click();
+  await expect(sessions.getByRole('listitem')).toHaveCount(1);
+  await page.reload();
+  await expect(sessions).toContainText(name);
+
+  // Create a session far enough ahead to exercise member changes.
+  const future = (await remaining.json()).slots.find(
+    (slot: { startsAt: string }) =>
+      Date.parse(slot.startsAt) > Date.now() + 48 * 60 * 60 * 1000,
+  );
+  expect(future).toBeTruthy();
+  const changeableResponse = await page.request.post('/api/bookings', {
+    headers,
+    data: {
+      professionalId,
+      startsAt: future.startsAt,
+      requestId: randomUUID(),
+    },
+  });
+  expect(changeableResponse.status()).toBe(201);
+  const changeable = (await changeableResponse.json()).booking;
+  await page.reload();
+  let card = sessions
+    .getByRole('listitem')
+    .filter({ has: page.locator(`time[datetime="${changeable.startsAt}"]`) });
+  await card.getByRole('button', { name: 'Reschedule', exact: true }).click();
+  const alternatives = await page.request.get(
+    `/api/sessions/${changeable.id}/reschedule-slots`,
+  );
+  const replacement = (await alternatives.json()).slots.find(
+    (slot: { startsAt: string }) =>
+      Date.parse(slot.startsAt) > Date.now() + 48 * 60 * 60 * 1000,
+  );
+  const newDay = new Intl.DateTimeFormat('en', {
+    timeZone: 'America/New_York',
+    dateStyle: 'full',
+  }).format(new Date(replacement.startsAt));
+  await card.getByLabel('New date').selectOption(newDay);
+  await card.getByLabel('New time').selectOption(replacement.startsAt);
+  await card
+    .getByRole('button', { name: 'Confirm reschedule', exact: true })
+    .click();
+  await expect(sessions).toContainText('Session rescheduled.');
+  card = sessions.getByRole('listitem').filter({
+    has: page.locator(
+      `time[datetime="${new Date(replacement.startsAt).toISOString()}"]`,
+    ),
+  });
+  await card
+    .getByRole('button', { name: 'Cancel session', exact: true })
+    .click();
+  await card
+    .getByRole('button', { name: 'Confirm cancellation', exact: true })
+    .click();
+  await expect(sessions).toContainText('Session cancelled.');
+  await expect(card).toHaveCount(0);
 });

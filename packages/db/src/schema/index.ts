@@ -10,6 +10,7 @@ import {
   primaryKey,
   check,
   unique,
+  date,
 } from 'drizzle-orm/pg-core';
 
 export const userRole = pgEnum('user_role', ['member', 'professional']);
@@ -59,6 +60,23 @@ export const professionalAvailability = pgTable(
       'availability_time_range',
       sql`${table.startMinute} >= 0 and ${table.endMinute} <= 1439 and ${table.endMinute} - ${table.startMinute} >= 50`,
     ),
+  ],
+);
+
+export const professionalBlockedDates = pgTable(
+  'professional_blocked_dates',
+  {
+    professionalId: uuid('professional_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // A calendar date in the professional's own timezone, not an instant.
+    blockedDate: date('blocked_date').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.professionalId, table.blockedDate] }),
   ],
 );
 
@@ -124,5 +142,41 @@ export const bookingReminders = pgTable(
     ),
     check('reminder_offset_allowed', sql`${table.offsetMinutes} in (60, 1440)`),
     index('reminders_due_idx').on(table.scheduledAt),
+  ],
+);
+
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey(),
+    // Deliberately not a foreign key: rescheduling retires old reminders, not notification history.
+    sourceReminderId: uuid('source_reminder_id').notNull().unique(),
+    bookingId: uuid('booking_id')
+      .notNull()
+      .references(() => bookings.id),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id),
+    counterpartName: text('counterpart_name').notNull(),
+    sessionStartsAt: timestamp('session_starts_at', {
+      withTimezone: true,
+    }).notNull(),
+    offsetMinutes: integer('offset_minutes').notNull(),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('notifications_recipient_created_idx').on(
+      table.recipientId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'notification_offset_allowed',
+      sql`${table.offsetMinutes} in (60, 1440)`,
+    ),
   ],
 );

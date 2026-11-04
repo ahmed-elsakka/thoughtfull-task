@@ -61,6 +61,7 @@ export function BookingCalendar({
         queryKey: ['booking-calendar', memberId],
       });
       await cache.invalidateQueries({ queryKey: ['availability-slots'] });
+      await cache.invalidateQueries({ queryKey: ['my-sessions', memberId] });
     },
     onError: () => {
       void cache.invalidateQueries({

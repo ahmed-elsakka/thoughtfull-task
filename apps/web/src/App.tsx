@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AvailabilityPanel } from './features/availability/AvailabilityPanel';
+import { BlockedDatesPanel } from './features/availability/BlockedDatesPanel';
 import { ProfessionalDirectory } from './features/professionals/ProfessionalDirectory';
 import { AuthScreen } from './features/auth/AuthScreen';
+import { MySessions } from './features/sessions/MySessions';
+import { Notifications } from './features/notifications/Notifications';
 import { currentUser, authRequest } from './lib/auth';
 
 export function App() {
@@ -70,14 +73,25 @@ export function App() {
               {logout.isPending ? 'Logging out...' : 'Log out'}
             </button>
           </section>
+          <Notifications
+            key={`notifications-${account.data.id}`}
+            user={account.data}
+          />
           {account.data.role === 'member' && (
             <ProfessionalDirectory
               key={account.data.id}
               memberId={account.data.id}
             />
           )}
+          <MySessions key={`sessions-${account.data.id}`} user={account.data} />
           {account.data.role === 'professional' && (
-            <AvailabilityPanel key={account.data.id} user={account.data} />
+            <>
+              <AvailabilityPanel key={account.data.id} user={account.data} />
+              <BlockedDatesPanel
+                key={`blocked-${account.data.id}`}
+                user={account.data}
+              />
+            </>
           )}
         </>
       ) : (
