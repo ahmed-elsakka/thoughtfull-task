@@ -48,21 +48,7 @@ npm run test:e2e         # browser tests on ports 3001 and 5174
 
 ## Architecture
 
-```text
- Browser
-    |  HTTP
-    v
- Web app (React + Vite; nginx in Docker)
-    |  /api
-    v
- API (Fastify) ------------------+
-    |                             |
-    v                             v
- PostgreSQL <------------ Reminder worker
- users, availability,       polls every 5 seconds and turns
- bookings, reminders,       due reminders into in-app
- notifications              notifications
-```
+![Application architecture: React UI features communicate with Fastify APIs over HTTP and JSON; the APIs read and write PostgreSQL. An independent reminder worker reads due reminders and saves notifications in the database.](docs/architecture.png)
 
 - `apps/web`: React UI (header navigation, booking calendar, My Sessions, availability and blocked dates, notifications drop-down that polls every 15 seconds).
 - `apps/api`: Fastify routes, cookie sessions, role checks and CSRF/origin checks.
