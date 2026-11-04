@@ -10,3 +10,4 @@ test-results/
 .DS_Store
 .npm-cache/
 .browser-cache/
+.vscode/
