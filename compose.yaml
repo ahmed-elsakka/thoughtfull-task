@@ -44,7 +44,9 @@ services:
       HOST: 0.0.0.0
       PORT: '3000'
       # Must match the address typed in the browser exactly (used for CSRF checks).
-      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:8080}
+      # A separate name from APP_ORIGIN, because Compose substitutes ${...} from the
+      # project .env file, which sets APP_ORIGIN for the npm workflow (port 5173).
+      APP_ORIGIN: ${DOCKER_APP_ORIGIN:-http://127.0.0.1:8080}
       # nginx is the only caller and overwrites X-Forwarded-For.
       TRUST_PROXY: 'true'
     depends_on:

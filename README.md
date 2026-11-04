@@ -12,7 +12,7 @@ docker compose up --build
 
 Open http://127.0.0.1:8080 (use this exact address, not `localhost`, because the API checks the request origin). Compose starts PostgreSQL, applies pending migrations once, then starts the API, the reminder worker, and an nginx container that serves the web app and proxies /api to the API. The first build takes a few minutes. Stop with Ctrl+C, and `docker compose down` removes the containers while keeping the database volume. `docker compose down -v` also deletes the data.
 
-The credentials in compose.yaml are local-only examples. Compose runs the API outside production mode because production requires HTTPS cookies; see DECISIONS.md for what changes for a real deployment. To use another address, set `APP_ORIGIN` before starting, for example `$env:APP_ORIGIN = 'http://127.0.0.1:9000'`, and change the published port to match.
+The credentials in compose.yaml are local-only examples. Compose runs the API outside production mode because production requires HTTPS cookies; see DECISIONS.md for what changes for a real deployment. To use another address, set `DOCKER_APP_ORIGIN` before starting, for example `$env:DOCKER_APP_ORIGIN = 'http://127.0.0.1:9000'`, and change the published port to match. The root `.env` (used by the npm workflow, with `APP_ORIGIN` on port 5173) does not affect Docker. If you change the origin and still see "Request origin is not allowed", rebuild with `docker compose up --build` and clear any leftover `$env:DOCKER_APP_ORIGIN`.
 
 ## Run locally with npm (PowerShell)
 
