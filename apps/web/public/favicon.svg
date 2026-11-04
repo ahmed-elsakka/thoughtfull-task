@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>ThoughtFull T</title>
+  <rect width="64" height="64" rx="16" fill="#00bfa2" />
+  <path
+    d="M18 16h28a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4h-8v20a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V26h-8a4 4 0 0 1-4-4v-2a4 4 0 0 1 4-4Z"
+    fill="#03367e"
+  />
+</svg>

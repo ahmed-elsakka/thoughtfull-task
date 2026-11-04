@@ -1,10 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AvailabilityPanel } from './features/availability/AvailabilityPanel';
-import { BlockedDatesPanel } from './features/availability/BlockedDatesPanel';
-import { ProfessionalDirectory } from './features/professionals/ProfessionalDirectory';
 import { AuthScreen } from './features/auth/AuthScreen';
-import { MySessions } from './features/sessions/MySessions';
-import { Notifications } from './features/notifications/Notifications';
+import { AppShell } from './features/shell/AppShell';
 import { currentUser, authRequest } from './lib/auth';
 
 export function App() {
@@ -23,6 +19,16 @@ export function App() {
     },
   });
 
+  if (account.data)
+    return (
+      <AppShell
+        user={account.data}
+        onLogout={() => logout.mutate()}
+        loggingOut={logout.isPending}
+        logoutError={logout.error?.message ?? null}
+      />
+    );
+
   return (
     <main className="mx-auto max-w-xl px-5 py-12 sm:py-20">
       <p className="mb-8 text-sm font-semibold uppercase tracking-[0.25em] text-ink">
@@ -37,63 +43,6 @@ export function App() {
             Try again
           </button>
         </section>
-      ) : account.data ? (
-        <>
-          <section className="rounded-3xl auth-card p-8">
-            <h1 className="text-3xl font-semibold text-ink">
-              Hello, {account.data.name}
-            </h1>
-            <p className="mt-3 text-copy">
-              You are logged in to your ThoughtFull account.
-            </p>
-            <dl className="my-7 space-y-3">
-              <div>
-                <dt className="text-sm text-muted">Email</dt>
-                <dd className="break-all">{account.data.email}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted">Account type</dt>
-                <dd className="capitalize">{account.data.role}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-muted">Timezone</dt>
-                <dd>{account.data.timezone}</dd>
-              </div>
-            </dl>
-            {logout.error && (
-              <p role="alert" className="mb-4 text-red-800">
-                {logout.error.message}
-              </p>
-            )}
-            <button
-              className="primary"
-              disabled={logout.isPending}
-              onClick={() => logout.mutate()}
-            >
-              {logout.isPending ? 'Logging out...' : 'Log out'}
-            </button>
-          </section>
-          <Notifications
-            key={`notifications-${account.data.id}`}
-            user={account.data}
-          />
-          {account.data.role === 'member' && (
-            <ProfessionalDirectory
-              key={account.data.id}
-              memberId={account.data.id}
-            />
-          )}
-          <MySessions key={`sessions-${account.data.id}`} user={account.data} />
-          {account.data.role === 'professional' && (
-            <>
-              <AvailabilityPanel key={account.data.id} user={account.data} />
-              <BlockedDatesPanel
-                key={`blocked-${account.data.id}`}
-                user={account.data}
-              />
-            </>
-          )}
-        </>
       ) : (
         <AuthScreen />
       )}

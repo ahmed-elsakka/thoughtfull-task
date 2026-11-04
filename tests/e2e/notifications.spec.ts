@@ -66,14 +66,27 @@ test('polls for notifications, marks them read, preserves them on refresh errors
     await route.fulfill({ json });
   });
   await page.goto('/');
+  const bell = page.getByRole('button', { name: /^Notifications/ });
   const panel = page.getByRole('region', {
     name: 'Notifications',
     exact: true,
   });
+  // The panel is a drop-down: closed until the bell is pressed.
+  await expect(bell).toBeVisible();
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByTestId('unread-bubble')).toHaveCount(0);
+  await bell.click();
   await expect(panel).toContainText('No notifications yet.');
   delivered = true;
   await page.clock.runFor(15_000);
   await expect(panel).toContainText('1 unread');
+  await expect(bell).toHaveAccessibleName('Notifications, 1 unread');
+  await expect(page.getByTestId('unread-bubble')).toHaveText('1');
+  // Escape closes the panel and the bubble stays.
+  await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByTestId('unread-bubble')).toHaveText('1');
+  await bell.click();
   await expect(panel).toContainText('Fictional Professional');
   await expect(panel).toContainText('Nov 4, 2026, 9:00 AM');
   fail = true;
@@ -88,10 +101,14 @@ test('polls for notifications, marks them read, preserves them on refresh errors
   await expect(panel.getByRole('button', { name: 'Mark as read' })).toHaveCount(
     0,
   );
+  await expect(page.getByTestId('unread-bubble')).toHaveCount(0);
   await page.reload();
+  await expect(page.getByTestId('unread-bubble')).toHaveCount(0);
+  await bell.click();
   await expect(panel).toContainText('0 unread');
+  await page.getByRole('button', { name: 'Account menu' }).click();
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
-  await expect(panel).toHaveCount(0);
+  await expect(bell).toHaveCount(0);
   const afterLogout = requests;
   await page.clock.runFor(30_000);
   expect(requests).toBe(afterLogout);

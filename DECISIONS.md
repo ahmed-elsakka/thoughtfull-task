@@ -32,6 +32,16 @@ A professional can block a date that already has confirmed sessions, and that is
 
 The required application flows are implemented. `npm run dev:all` runs compiled services because two `tsx watch` processes started together hung on one Windows development machine; the cause was not investigated, and watch mode remains available per workspace. Add CI, operational monitoring, database query timeouts, and broader browser coverage. Browser execution remains constrained by this Windows sandbox.
 
+## Header navigation
+
+A single header holds the sections on the left and the notifications bell and account menu on the right, replacing one long page of stacked panels. Members see Find a Professional and My Sessions; professionals see My Sessions, Availability, and Blocked Dates. Members open on Find a Professional because discovering and booking is their main task. Professionals open on My Sessions because their schedule is what they check most often, and Availability and Blocked Dates are occasional settings, so a new professional is not forced into a settings form.
+
+Each section is a URL hash (`#sessions`, `#availability`, `#blocked-dates`, and the existing `#professionals` and `#professionals/<id>`), not component state. This keeps reload, Back, and shareable addresses working, needs no routing library, and reuses the hash the professional directory already used. An address that does not belong to the account type (for example a member opening `#availability`) falls back to that account's default section; the server still enforces access, so this is presentation only.
+
+The notifications panel is a drop-down, and its query keeps running while it is closed so the unread bubble stays current (same 15 second polling, no extra requests). The bubble shows the total unread count across all pages and caps at 99+. The menus close on Escape and outside clicks, only one is open at a time, and focus returns to the button on Escape. On narrow screens the navigation moves to a second header row and the drop-downs span the screen width.
+
+Trade-offs: only the active section is mounted, so unsaved edits in the weekly hours form are lost when the user switches section. A hidden page heading gives each section an `h1` for screen readers. The profile menu replaces the old "Hello" greeting card, so the user's email and timezone are one click away rather than always visible. There is no mobile hamburger menu because four short links fit in a scrolling row.
+
 ## Docker Compose
 
 `docker compose up --build` runs the whole app, as the brief's optional extra asks. Services: PostgreSQL, a one-shot `migrate` container, the API, the reminder worker, and an nginx container. The API, worker and migration runner share one image, run as the non-root `node` user with only production dependencies. The migration runner uses Drizzle's migrator (`packages/db/src/migrate.ts`) instead of `drizzle-kit`, which is a development dependency; both write to the same Drizzle migrations table, so a database migrated either way stays consistent. The API and worker wait for `migrate` to finish, and the web container waits for a healthy API.

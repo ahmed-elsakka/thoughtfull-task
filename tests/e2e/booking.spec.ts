@@ -93,6 +93,10 @@ test('a member selects a date and time, confirms, and cannot book that slot agai
     ),
   ).toBe(false);
 
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'My Sessions' })
+    .click();
   const sessions = page.getByRole('region', { name: 'My sessions' });
   await expect(sessions).toContainText(name);
   await expect(sessions).toContainText('America/New_York');

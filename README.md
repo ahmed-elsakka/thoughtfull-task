@@ -2,6 +2,17 @@
 
 Implemented: authentication, professional availability, blocked dates (holidays), professional browsing, calendar booking, My sessions, cancellation/rescheduling, and in-app reminders delivered by a PostgreSQL-backed worker.
 
+## Using the app
+
+A header runs across the top of every signed-in page. The sections are on the left and depend on the account type:
+
+| Account      | Sections                                                | Opens on            |
+| ------------ | ------------------------------------------------------- | ------------------- |
+| Member       | Find a Professional, My Sessions                        | Find a Professional |
+| Professional | My Sessions, Availability (weekly hours), Blocked Dates | My Sessions         |
+
+On the right are the notifications bell and the account menu. The bell shows a bubble with the number of unread notifications (up to 99+) and opens a drop-down list with the reminders, mark-as-read, and paging. The account icon opens a menu with your name, email, account type, timezone, and **Log out**. Press Escape or click outside to close a menu. Each section has its own address (`#professionals`, `#sessions`, `#availability`, `#blocked-dates`), so reload and the browser Back button work, and an address that belongs to the other account type opens that account's default section.
+
 ## Run everything with Docker Compose
 
 Requires only Docker with Compose.
@@ -82,7 +93,7 @@ Production requires NODE_ENV=production, an exact HTTPS APP_ORIGIN, and same-ori
 
 Run npm run db:generate after schema edits and npm run db:migrate to apply migrations with DATABASE_URL set. `docker compose up --build` runs the whole app; `docker compose up -d db` starts only PostgreSQL for the npm workflow. See DECISIONS.md for limitations.
 
-Verification in the development environment: build, type checks, formatting, and all 77 unit/API/SQL tests passed. Browser specs were added, but Edge exited before executing them due to sandbox access errors; the fallback Chromium download stalled. Run the browser tests on a host that permits Playwright browser processes. Production dependency audit reported zero vulnerabilities; Drizzle Kit has moderate development-only advisories.
+Verification in the development environment: build, type checks, formatting, and all 77 unit/API/SQL tests passed. The seven browser specs (`npm run test:e2e`) also passed on Linux Chromium after the header layout was added, but they have not been run on the original Windows machine, where Edge exited before executing them; run them on a host that permits Playwright browser processes. Production dependency audit reported zero vulnerabilities; Drizzle Kit has moderate development-only advisories.
 
 ## Minimum booking notice
 
@@ -90,7 +101,7 @@ Members cannot book or reschedule onto a session that starts less than 2 hours f
 
 ## Blocked dates
 
-Log in as a professional and use **Blocked dates** below the working hours. Pick a date (today up to 365 days ahead) and choose **Block date**. Members then see no slots on that date, and the slot preview updates immediately. **Unblock** restores the date. Dates are calendar dates in the professional's own timezone. Blocking does not cancel sessions that are already booked: they stay confirmed and are flagged in the list so you can cancel them from My sessions. Apply migration 0004 with `npm run db:migrate` first.
+Log in as a professional and open **Blocked Dates** in the header. Pick a date (today up to 365 days ahead) and choose **Block date**. Members then see no slots on that date, and the slot preview updates immediately. **Unblock** restores the date. Dates are calendar dates in the professional's own timezone. Blocking does not cancel sessions that are already booked: they stay confirmed and are flagged in the list so you can cancel them from My sessions. Apply migration 0004 with `npm run db:migrate` first.
 
 - GET /api/professional/blocked-dates returns `{timezone, dates: [{date, confirmedSessions}]}`.
 - POST /api/professional/blocked-dates with `{"date": "2026-12-25"}` blocks a date (201, or 200 if already blocked).
@@ -100,7 +111,7 @@ All three require a logged-in professional, and writes require the CSRF headers.
 
 ## Professional availability
 
-Log in as a professional and scroll to **Weekly working hours**. Enable a day, enter opening/closing times, and save. All times use the professional's signup timezone; the backend derives both identity and timezone from the session. The editor starts with every day closed. Members cannot read or change this settings endpoint.
+Log in as a professional and open **Availability** in the header to see **Weekly working hours**. Enable a day, enter opening/closing times, and save. All times use the professional's signup timezone; the backend derives both identity and timezone from the session. The editor starts with every day closed. Members cannot read or change this settings endpoint.
 
 - GET /api/professional/availability: returns timezone and seven days.
 - PUT /api/professional/availability: replaces the entire week with `{days: [{dayOfWeek: 1, startTime: "09:00", endTime: "17:00"}, ...]}`. Include weekdays 1-7 once each; closed days have both times null. User IDs and timezone overrides are rejected.
@@ -135,11 +146,11 @@ Run npm run db:migrate for the booking tables and btree_gist constraints. Instal
 
 Run npm test for all unit/API/SQL tests. Run npm run test:postgres for ten real concurrent-connection checks against a local PostgreSQL server. This requires CREATE DATABASE permission and uses a uniquely named disposable database, which is cleaned up afterwards; application data is untouched. Checks cover same-slot competition, overlapping sessions across professionals, simultaneous retries, database constraint enforcement on direct SQL writes, and races involving rescheduling and cancellation.
 
-The booking browser scenario is included in npm run test:e2e but remains unverified under the current sandbox startup/browser-launch restrictions. The notification polling browser test uses mocked responses to exercise polling, unread updates, error recovery, and logout independently of worker timing.
+The booking browser scenario is included in npm run test:e2e (it passed on Linux Chromium). The notification polling browser test uses mocked responses to exercise polling, unread updates, error recovery, and logout independently of worker timing.
 
 ## My sessions
 
-Both roles see **My sessions** below the member directory or above professional availability. Members can switch between Upcoming and Past; professionals see their upcoming schedule with member names. Dates and times use the signed-in user's timezone. Upcoming includes in-progress confirmed sessions until their end time; Past shows ended sessions, most recent first. Cancelled future sessions are excluded from Upcoming.
+Both roles see **My Sessions** in the header (it is the professional's default section). Members can switch between Upcoming and Past; professionals see their upcoming schedule with member names. Dates and times use the signed-in user's timezone. Upcoming includes in-progress confirmed sessions until their end time; Past shows ended sessions, most recent first. Cancelled future sessions are excluded from Upcoming.
 
 GET /api/sessions?period=upcoming&page=1 returns `{sessions: [{id, counterpartName, startsAt, endsAt, status}], nextPage}`. The period defaults to upcoming and the page to 1. Only members can request past. The API derives identity and role from the authenticated session and rejects client identity overrides. Results are ordered and paginated in groups of 20. No new migration is required.
 
@@ -173,9 +184,9 @@ The worker checks PostgreSQL immediately on startup and every five seconds after
 
 Each due reminder produces one notification for its recipient. The notification insert and delivered timestamp commit together. A unique source reminder ID prevents duplicates. Worker and session changes acquire participant locks in UUID order, then the booking, then reminders; this also accounts for implicit locks from notification foreign keys. Cancellation removes pending reminders. Rescheduling replaces pending reminder scheduling while preserving already-delivered notification snapshots.
 
-Both roles see Notifications after their account details. The UI polls every 15 seconds while the tab is active, refetches on focus/reconnection, stops polling on logout, and supports read state and 20-item pages. Unread count covers all pages. Existing notifications remain visible when a refresh fails. In normal operation, delivery plus UI polling adds about 20 seconds of latency, plus processing/network time; backlog or downtime can increase it.
+Both roles see the notifications bell in the header, with an unread bubble, and the list opens as a drop-down. The UI polls every 15 seconds while the tab is active, refetches on focus/reconnection, stops polling on logout, and supports read state and 20-item pages. Unread count covers all pages. Existing notifications remain visible when a refresh fails. In normal operation, delivery plus UI polling adds about 20 seconds of latency, plus processing/network time; backlog or downtime can increase it.
 
 - GET /api/notifications?page=1 returns `{notifications, unreadCount, nextPage}` for the authenticated recipient only.
 - PATCH /api/notifications/:id/read with an empty JSON object marks an owned notification read, idempotently. Writes require the existing CSRF headers. Other users' IDs return 404.
 
-Run `npm test` for delivery boundaries, restart recovery, rollback, duplicate prevention, ownership, pagination, read state, backlog draining across multiple passes, professional cancellation inside 24 hours, daylight-saving reminder times, and worker retry/shutdown. The PostgreSQL suite also tests concurrent workers and races with cancellation/rescheduling. `tests/e2e/notifications.spec.ts` covers browser polling and read state; browser execution may require running outside the current Windows sandbox.
+Run `npm test` for delivery boundaries, restart recovery, rollback, duplicate prevention, ownership, pagination, read state, backlog draining across multiple passes, professional cancellation inside 24 hours, daylight-saving reminder times, and worker retry/shutdown. The PostgreSQL suite also tests concurrent workers and races with cancellation/rescheduling. `tests/e2e/notifications.spec.ts` covers the drop-down, the unread bubble, browser polling, read state, error recovery, and logout.

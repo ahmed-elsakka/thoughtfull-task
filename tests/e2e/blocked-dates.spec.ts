@@ -19,6 +19,10 @@ test('a professional blocks a date, sees it listed, and unblocks it', async ({
     .getByRole('button', { name: 'Create account', exact: true })
     .click();
 
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Blocked Dates' })
+    .click();
   const panel = page.getByRole('region', { name: 'Blocked dates' });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('No upcoming blocked dates.');

@@ -19,11 +19,19 @@ test('a professional saves hours, previews generated slots, and closes a day', a
     .getByRole('button', { name: 'Create account', exact: true })
     .click();
 
+  // A professional opens on My Sessions; working hours are under Availability.
+  await expect(
+    page.getByRole('heading', { name: 'Weekly working hours' }),
+  ).toHaveCount(0);
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Availability' })
+    .click();
   await expect(
     page.getByRole('heading', { name: 'Weekly working hours' }),
   ).toBeVisible();
   await expect(page.getByLabel('Monday open')).not.toBeChecked();
-  await page.getByLabel('Monday open').check();
+  await page.getByLabel('Monday open', { exact: true }).check();
   await page.getByLabel('Monday opening time').fill('09:15');
   await page.getByLabel('Monday closing time').fill('09:30');
   await page.getByRole('button', { name: 'Save working hours' }).click();
@@ -44,7 +52,7 @@ test('a professional saves hours, previews generated slots, and closes a day', a
   await expect(page.getByLabel('Monday opening time')).toHaveValue('09:15');
   await expect(page.getByLabel('Monday closing time')).toHaveValue('11:05');
 
-  await page.getByLabel('Monday open').uncheck();
+  await page.getByLabel('Monday open', { exact: true }).uncheck();
   await page.getByRole('button', { name: 'Save working hours' }).click();
   await expect(
     page.getByText('Working hours saved.', { exact: true }),
