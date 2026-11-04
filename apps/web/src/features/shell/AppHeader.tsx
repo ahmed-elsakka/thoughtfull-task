@@ -25,9 +25,12 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-20 border-b border-soft bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
-        <span className="text-sm font-semibold uppercase tracking-[0.25em] text-ink">
+        <a
+          href="/"
+          className="text-sm font-semibold uppercase tracking-[0.25em] text-ink hover:opacity-80"
+        >
           ThoughtFull
-        </span>
+        </a>
         <nav
           aria-label="Main"
           className="order-last -mx-1 flex w-full gap-1 overflow-x-auto px-1 sm:order-none sm:mx-0 sm:w-auto sm:px-0"
