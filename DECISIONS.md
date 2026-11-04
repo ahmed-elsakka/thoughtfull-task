@@ -30,7 +30,15 @@ A professional can block a date that already has confirmed sessions, and that is
 
 ## Follow-up work
 
-The required application flows are implemented. `npm run dev:all` runs compiled services because two `tsx watch` processes started together hung on one Windows development machine; the cause was not investigated, and watch mode remains available per workspace. Add full-app Compose, CI, operational monitoring, database query timeouts, and broader browser coverage. Browser execution remains constrained by this Windows sandbox.
+The required application flows are implemented. `npm run dev:all` runs compiled services because two `tsx watch` processes started together hung on one Windows development machine; the cause was not investigated, and watch mode remains available per workspace. Add CI, operational monitoring, database query timeouts, and broader browser coverage. Browser execution remains constrained by this Windows sandbox.
+
+## Docker Compose
+
+`docker compose up --build` runs the whole app, as the brief's optional extra asks. Services: PostgreSQL, a one-shot `migrate` container, the API, the reminder worker, and an nginx container. The API, worker and migration runner share one image, run as the non-root `node` user with only production dependencies. The migration runner uses Drizzle's migrator (`packages/db/src/migrate.ts`) instead of `drizzle-kit`, which is a development dependency; both write to the same Drizzle migrations table, so a database migrated either way stays consistent. The API and worker wait for `migrate` to finish, and the web container waits for a healthy API.
+
+nginx serves the built web app and proxies /api, so the browser has one origin, matching the same-origin routing the API expects. The API runs with `TRUST_PROXY=true` only because nginx is its sole caller and overwrites `X-Forwarded-For`; without it every user would share one login rate-limit bucket keyed on nginx's address. The API is not published to the host.
+
+Trade-offs and limits: the API runs outside `NODE_ENV=production` in Compose, because production mode requires an HTTPS origin and Secure cookies and Compose serves plain HTTP on localhost. The app must be opened at exactly http://127.0.0.1:8080 or the origin check rejects writes. The database password is a local example. I could not run Docker in the environment where this was written, so the image build steps were verified by performing the same install, build, prune and start commands outside Docker, and the compose file itself needs a first run on your machine.
 
 ## Production considerations to address
 

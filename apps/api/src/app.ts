@@ -20,6 +20,8 @@ export function buildApp(
     professionals?: ProfessionalStore;
     bookings?: BookingStore;
     notifications?: NotificationStore;
+    // Only enable behind a trusted reverse proxy that overwrites X-Forwarded-For.
+    trustProxy?: boolean;
   } = {},
 ) {
   const app = Fastify({
@@ -33,6 +35,7 @@ export function buildApp(
               'res.headers.set-cookie',
             ],
           },
+    trustProxy: options.trustProxy ?? false,
     bodyLimit: 16384,
     ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
   });

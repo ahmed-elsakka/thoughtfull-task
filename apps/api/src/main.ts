@@ -28,6 +28,7 @@ const app = buildApp({
   professionals: database.professionalStore,
   bookings: database.bookingStore,
   notifications: database.notificationStore,
+  trustProxy: process.env.TRUST_PROXY === 'true',
 });
 
 app.addHook('onClose', async () => {

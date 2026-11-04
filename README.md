@@ -2,9 +2,21 @@
 
 Implemented: authentication, professional availability, blocked dates (holidays), professional browsing, calendar booking, My sessions, cancellation/rescheduling, and in-app reminders delivered by a PostgreSQL-backed worker.
 
-## Run locally (PowerShell)
+## Run everything with Docker Compose
 
-Requires Node.js 24, npm 11, and PostgreSQL 17 or Docker Compose.
+Requires only Docker with Compose.
+
+```powershell
+docker compose up --build
+```
+
+Open http://127.0.0.1:8080 (use this exact address, not `localhost`, because the API checks the request origin). Compose starts PostgreSQL, applies pending migrations once, then starts the API, the reminder worker, and an nginx container that serves the web app and proxies /api to the API. The first build takes a few minutes. Stop with Ctrl+C, and `docker compose down` removes the containers while keeping the database volume. `docker compose down -v` also deletes the data.
+
+The credentials in compose.yaml are local-only examples. Compose runs the API outside production mode because production requires HTTPS cookies; see DECISIONS.md for what changes for a real deployment. To use another address, set `APP_ORIGIN` before starting, for example `$env:APP_ORIGIN = 'http://127.0.0.1:9000'`, and change the published port to match.
+
+## Run locally with npm (PowerShell)
+
+Requires Node.js 24, npm 11, and PostgreSQL 17 or Docker Compose. This is the faster loop while editing code.
 
 ```powershell
 npm install
@@ -68,7 +80,7 @@ Writes require Origin matching APP_ORIGIN and X-Requested-With: ThoughtFull. The
 
 Production requires NODE_ENV=production, an exact HTTPS APP_ORIGIN, and same-origin routing of /api. Cookies are HttpOnly, SameSite=Lax, and Secure in production. Sessions last seven days.
 
-Run npm run db:generate after schema edits and npm run db:migrate to apply migrations with DATABASE_URL set. Compose starts PostgreSQL only; the API, web app, and worker run from npm scripts. See DECISIONS.md for limitations.
+Run npm run db:generate after schema edits and npm run db:migrate to apply migrations with DATABASE_URL set. `docker compose up --build` runs the whole app; `docker compose up -d db` starts only PostgreSQL for the npm workflow. See DECISIONS.md for limitations.
 
 Verification in the development environment: build, type checks, formatting, and all 77 unit/API/SQL tests passed. Browser specs were added, but Edge exited before executing them due to sandbox access errors; the fallback Chromium download stalled. Run the browser tests on a host that permits Playwright browser processes. Production dependency audit reported zero vulnerabilities; Drizzle Kit has moderate development-only advisories.
 

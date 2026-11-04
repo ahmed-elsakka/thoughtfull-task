@@ -1,3 +1,15 @@
+# One command runs the whole app: docker compose up --build
+# Then open http://127.0.0.1:8080. For local development with npm scripts,
+# start only the database with: docker compose up -d db
+x-server: &server
+  build:
+    context: .
+    target: server
+  image: thoughtfull-server
+  environment:
+    &server-env # Local-only example credentials, matching the db service below.
+    DATABASE_URL: postgresql://thoughtfull:thoughtfull_dev@db:5432/thoughtfull
+
 services:
   db:
     image: postgres:17
@@ -14,5 +26,62 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Applies pending migrations, then exits. The API and worker wait for it.
+  migrate:
+    <<: *server
+    command: ['node', 'packages/db/dist/migrate.js']
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    <<: *server
+    command: ['node', 'apps/api/dist/main.js']
+    environment:
+      <<: *server-env
+      HOST: 0.0.0.0
+      PORT: '3000'
+      # Must match the address typed in the browser exactly (used for CSRF checks).
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:8080}
+      # nginx is the only caller and overwrites X-Forwarded-For.
+      TRUST_PROXY: 'true'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    <<: *server
+    command: ['node', 'apps/worker/dist/main.js']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: web
+    image: thoughtfull-web
+    ports:
+      - '127.0.0.1:8080:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:

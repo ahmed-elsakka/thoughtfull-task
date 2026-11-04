@@ -20,9 +20,10 @@ let database: PGlite;
 let sql: SqlDatabase;
 let clock = new Date('2026-11-03T12:00:00Z');
 
-const makeApp = (secureCookies = false) =>
+const makeApp = (secureCookies = false, trustProxy = false) =>
   buildApp({
     logger: false,
+    trustProxy,
     auth: {
       store: createAuthStore(sql),
       origin: headers.origin,
@@ -316,6 +317,30 @@ describe('persistent authentication', () => {
       ).statusCode,
     ).toBe(429);
   });
+
+  it.each([
+    [false, 429],
+    [true, 401],
+  ])(
+    'rate limits by forwarded client address only when proxy trust is %s',
+    async (trustProxy, expected) => {
+      await app.close();
+      app = makeApp(false, trustProxy);
+      const attempt = (address: string) =>
+        app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { email: signup.email, password: 'invalid' },
+          headers: { ...headers, 'x-forwarded-for': address },
+        });
+
+      for (let i = 0; i < 10; i++)
+        expect((await attempt('203.0.113.10')).statusCode).toBe(401);
+
+      // A different client behind the proxy is only throttled when the address is ignored.
+      expect((await attempt('203.0.113.20')).statusCode).toBe(expected);
+    },
+  );
 
   it('rolls back user creation if its session cannot be persisted', async () => {
     const created = await post('/api/auth/signup', signup);
