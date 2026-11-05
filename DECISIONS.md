@@ -13,7 +13,8 @@ I chose Fastify for its built-in schema validation and response serialization, w
 Express offers a broader middleware ecosystem and a familiar programming model, but equivalent validation and serialization usually require additional libraries.
 
 ## Assumptions
-I assumed freedom in designing the UI and the UX since there are no requirements
+- Freedom in designing the UI and the UX since there are no requirements.
+- Blocking a date does not cancel sessions already scheduled for that day.
 
 ## Known limitations
 - Reminders are checked every 5 seconds, and the UI polls every 15 seconds, so reminders do not appear instantly.
@@ -25,3 +26,28 @@ I assumed freedom in designing the UI and the UX since there are no requirements
 - Improve professional discovery with richer profiles, search, and filters.
 - Add logging and monitoring.
 - Configure automated database backups and test restoration.
+
+
+## Preventing double-booking
+I enforce this in PostgreSQL using exclusion constraints that prevent overlapping confirmed sessions for either the professional or the member. This protects against simultaneous requests, even when both users initially see the slot as available.
+
+Booking operations run inside transactions and lock participant rows in a consistent order before checking availability and saving changes.
+
+## Scheduling and delivering reminders reliably
+When a booking is created, reminders for both participants are saved in the same transaction, scheduled for 24 hours and 1 hour before the session. Reminder times that have already passed are skipped. Cancellation removes pending reminders, and rescheduling replaces the schedule transactionally.
+
+A separate worker checks PostgreSQL for due reminders, waiting 5 seconds between passes. Creating the in-app notification and marking its reminder as delivered happen in one transaction. Failed transactions leave reminders pending for retry, while a unique reminder identifier prevents duplicate notifications. Consistent locking coordinates delivery with cancellation and rescheduling.
+
+The UI polls every 15 seconds while the tab is active. This provides durable, duplicate-safe notification creation, but does not guarantee immediate display or that the user has read it. After downtime, the worker processes overdue reminders; a production version would need an explicit policy for reminders that are no longer useful.
+
+## Handling timezones and daylight saving
+Users have named IANA timezones, availability is defined in the professional’s local time, while bookings and reminder timestamps are stored as absolute instants using PostgreSQL timestamptz. The UI displays these instants in the viewer’s timezone.
+
+Slot generation uses Temporal to apply the timezone’s offset for each date, keeping weekly local working hours consistent across daylight saving changes.
+
+## What would I consider for production
+- Identity and access: Verify professional accounts, add email verification and secure account recovery, introduce MFA, and review permissions using least privilege.
+- Data protection: Enforce HTTPS, encrypt databases and backups, manage secrets securely, and prevent sensitive information from appearing in logs.
+- Auditability and privacy: Record access and booking changes in protected audit logs, minimize collected data, and define retention and deletion policies.
+Operational reliability: Add monitoring for API errors and reminder delays, isolate repeatedly failing jobs, load-test concurrency, and establish incident response procedures.
+- Recovery: Configure automated backups and point-in-time recovery, then regularly test restoration against recovery targets. PostgreSQL supports this through base backups and archived transaction logs.
