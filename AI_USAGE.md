@@ -4,3 +4,4 @@ Codex for initial project folder setup, Claude Code and Codex for initial implem
 
 Corrected the UI/UX created by Codex which had no navigation and a random coloring scheme.
 
+Added guidelines and more details for the AI about how to format the generated code via AGENTS.md.
