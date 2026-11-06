@@ -1,0 +1,48 @@
+# Production overlay for a public demo. Use together with compose.yaml:
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+# Requires DOMAIN and POSTGRES_PASSWORD in the project .env file (see .env.example).
+services:
+  db:
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+  migrate:
+    environment:
+      DATABASE_URL: postgresql://thoughtfull:${POSTGRES_PASSWORD}@db:5432/thoughtfull
+
+  api:
+    environment:
+      DATABASE_URL: postgresql://thoughtfull:${POSTGRES_PASSWORD}@db:5432/thoughtfull
+      NODE_ENV: production
+      APP_ORIGIN: https://${DOMAIN:?Set DOMAIN in .env}
+      # Caddy is the only caller of the API and sets X-Forwarded-For.
+      TRUST_PROXY: 'true'
+
+  worker:
+    environment:
+      DATABASE_URL: postgresql://thoughtfull:${POSTGRES_PASSWORD}@db:5432/thoughtfull
+
+  # Terminates HTTPS (automatic certificates) and routes /api to the API and
+  # everything else to the web container.
+  caddy:
+    image: caddy:2
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
